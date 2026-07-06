@@ -3,34 +3,37 @@
 import os
 import re
 import sys
+import ast
+import time
 import uuid
+import json
+import hashlib
 import requests
 import subprocess
 import chromadb
-from typing import List, Dict, Optional, Tuple
 import textwrap
-from pathlib import Path  # ✅ 优化：引入 Pathlib 解决跨平台路径拼接痛点
+from typing import List, Dict, Optional, Tuple
+from pathlib import Path
 
-import os
-import sys
-
-# 🌟 强行将 MiKTeX 的安装路径注入到当前进程的 PATH 中
-# 请根据你 MiKTeX 的实际安装路径调整，通常在以下两个路径之一：
-# 路径A（标准安装）：r"C:\Program Files\MiKTeX\miktex\bin\x64"
-# 路径B（仅为当前用户安装）：fr"C:\Users\{os.getlogin()}\AppData\Local\Programs\MiKTeX\miktex\bin\x64"
-
-miktex_path = fr"C:\Users\{os.getlogin()}\AppData\Local\Programs\MiKTeX\miktex\bin\x64" # 或者是路径A
-
-if miktex_path not in os.environ["PATH"]:
+# ===================== 环境安全与路径配置 =====================
+miktex_path = fr"C:\Users\{os.getlogin()}\AppData\Local\Programs\MiKTeX\miktex\bin\x64"
+if os.path.exists(miktex_path) and miktex_path not in os.environ["PATH"]:
     os.environ["PATH"] = miktex_path + os.pathsep + os.environ["PATH"]
 
-# ===================== 全局配置常量 =====================
-OLLAMA_BASE_URL: str = "http://localhost:11434"
-CODER_MODEL_NAME: str = "qwen2.5-coder:7b-instruct"
-EMBEDDING_MODEL_NAME: str = "nomic-embed-text"
+# ===================== 模型与 API 全局配置 =====================
+DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
+DEEPSEEK_API_KEY = "sk-a1ae0c2504f84043bf7a558d957f17a9"
+# 优先用你原始可用的模型；如果还是空，换成 deepseek-coder 官方标准模型测试
+CODER_MODEL_NAME = "deepseek-v4-flash"
 LLM_TEMPERATURE: float = 0.1
-API_REQUEST_TIMEOUT: int = 60
+LLM_TOP_P: float = 0.85
+API_REQUEST_TIMEOUT: int = 180
 
+# --- Ollama 本地服务 ---
+OLLAMA_BASE_URL: str = "http://localhost:11434"
+EMBEDDING_MODEL_NAME: str = "nomic-embed-text"
+
+# ===================== 业务常量配置 =====================
 CHROMA_PERSIST_DIR: str = "chroma_db"
 CHROMA_COLLECTION_NAME: str = "manim_animation_kb"
 RAG_TOP_K: int = 2
@@ -38,12 +41,12 @@ RAG_TOP_K: int = 2
 MAX_ANIMATION_DURATION: int = 30
 DEFAULT_RETRY_TIMES: int = 3
 
-# ✅ 优化：使用绝对路径，避免 FastAPI 启动目录不同导致找不到文件夹
 BASE_DIR = Path(__file__).resolve().parent
 OUTPUT_DIR = BASE_DIR / "outputs"
 CODE_OUTPUT_SUBDIR = OUTPUT_DIR / "code"
 VIDEO_OUTPUT_SUBDIR = OUTPUT_DIR / "videos"
-RENDER_QUALITY_FLAG: str = "-ql"
+CACHE_DIR = BASE_DIR / "cache"
+RENDER_QUALITY_FLAG: str = "-qm"
 RENDER_TIMEOUT: int = 120
 
 CODE_BLOCK_PATTERN: str = r"```python\s*(.*?)\s*```|```\s*(.*?)\s*```"
@@ -51,33 +54,29 @@ SCENE_CLASS_PATTERN: str = r"class\s+(\w+)\s*\(\s*Scene\s*\)"
 
 # ===================== 全局资源初始化 =====================
 try:
-    chroma_client = chromadb.PersistentClient(path=os.path.join(BASE_DIR, CHROMA_PERSIST_DIR))
+    chroma_client = chromadb.PersistentClient(path=str(BASE_DIR / CHROMA_PERSIST_DIR))
     kb_collection = chroma_client.get_collection(name=CHROMA_COLLECTION_NAME)
 except Exception as e:
-    # 降级处理，允许服务启动但输出强警告，防止直接 Crash
     kb_collection = None
     print(f"⚠️ 严重警告：向量库初始化失败，请检查是否已执行 build_kb.py。错误：{str(e)}")
 
-# 确保输出目录存在
 CODE_OUTPUT_SUBDIR.mkdir(parents=True, exist_ok=True)
 VIDEO_OUTPUT_SUBDIR.mkdir(parents=True, exist_ok=True)
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # ===================== 通用工具函数 =====================
 def generate_embedding(text: str) -> List[float]:
-    """调用Ollama嵌入模型生成文本向量"""
     try:
-        # ✅ 优化：修复了此前 404/400 错误的旧接口，更新为最新的 embed 标准
         response = requests.post(
             url=f"{OLLAMA_BASE_URL}/api/embed",
             json={
                 "model": EMBEDDING_MODEL_NAME,
-                "input": text  # 旧版是 prompt，必须用 input
+                "input": text
             },
             timeout=API_REQUEST_TIMEOUT
         )
         response.raise_for_status()
-        # ✅ 优化：新接口返回的是二维数组 embeddings
         return response.json().get("embeddings", [[]])[0]
     except requests.exceptions.RequestException as e:
         print(f"❌ 向量生成失败：{str(e)}")
@@ -102,14 +101,82 @@ def extract_scene_class_name(code: str) -> Optional[str]:
     return None
 
 
+# ===================== 缓存工具函数 =====================
+def get_cached_result(user_input: str) -> Optional[Dict]:
+    input_hash = hashlib.md5(user_input.strip().encode("utf-8")).hexdigest()
+    cache_file = CACHE_DIR / f"{input_hash}.json"
+    if cache_file.exists():
+        try:
+            with open(cache_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return None
+    return None
+
+
+def save_to_cache(user_input: str, result: Dict):
+    input_hash = hashlib.md5(user_input.strip().encode("utf-8")).hexdigest()
+    cache_file = CACHE_DIR / f"{input_hash}.json"
+    try:
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump(result, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"⚠️ 缓存写入失败：{str(e)}")
+
+
+# ===================== DeepSeek API 统一封装（调试版）=====================
+def deepseek_chat_request(messages: List[Dict]) -> Tuple[bool, str]:
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {DEEPSEEK_API_KEY}"
+    }
+    payload = {
+        "model": CODER_MODEL_NAME,
+        "messages": messages,
+        "temperature": LLM_TEMPERATURE,
+        "top_p": LLM_TOP_P,
+        "stream": False
+    }
+
+    max_retry = 2
+    for attempt in range(max_retry):
+        try:
+            response = requests.post(
+                url=DEEPSEEK_API_URL,
+                headers=headers,
+                json=payload,
+                timeout=API_REQUEST_TIMEOUT
+            )
+            response.raise_for_status()
+            resp_json = response.json()
+
+            # ====== 调试：打印完整响应，控制台可直接看到返回内容 ======
+            print("🔍 DeepSeek完整响应：", json.dumps(resp_json, ensure_ascii=False, indent=2))
+
+            content = resp_json["choices"][0]["message"]["content"]
+            if not content or not content.strip():
+                return False, "❌ 模型返回空内容，请检查模型名或提示词"
+            return True, content
+        except requests.exceptions.Timeout:
+            if attempt < max_retry - 1:
+                wait_time = 2 ** attempt
+                print(f"⚠️ DeepSeek API超时，第{attempt + 1}次重试，等待{wait_time}秒...")
+                time.sleep(wait_time)
+                continue
+            return False, f"❌ DeepSeek API连续{max_retry}次读取超时，请稍后重试"
+        except Exception as e:
+            return False, f"❌ DeepSeek API调用失败：{str(e)}"
+    return False, "❌ DeepSeek API达到最大重试次数"
+
+
 # ===================== 核心业务逻辑 =====================
 def rag_retrieve_references(user_query: str) -> str:
     if not kb_collection:
-        return "⚠️ 知识库未就绪，使用纯大模型能力生成。"
+        return "知识库未就绪，使用纯大模型能力生成。"
 
     query_embedding = generate_embedding(user_query)
     if not query_embedding:
-        return "⚠️ 未获取到参考资料（向量生成失败）"
+        return "未获取到参考资料（向量生成失败）"
 
     try:
         results = kb_collection.query(
@@ -117,7 +184,7 @@ def rag_retrieve_references(user_query: str) -> str:
             n_results=RAG_TOP_K
         )
         if not results.get("documents") or not results["documents"][0]:
-            return "⚠️ 未找到相关参考资料"
+            return "未找到相关参考资料"
 
         references = []
         for idx, (doc, meta) in enumerate(zip(results["documents"][0], results["metadatas"][0])):
@@ -126,89 +193,87 @@ def rag_retrieve_references(user_query: str) -> str:
         return "\n".join(references)
     except Exception as e:
         print(f"❌ RAG检索失败：{str(e)}")
-        return "⚠️ 参考资料检索失败"
+        return "参考资料检索失败"
 
 
 def generate_manim_code(user_requirement: str) -> Tuple[bool, str]:
     references = rag_retrieve_references(user_requirement)
     system_prompt = textwrap.dedent(f"""
-    你是专业的Manim Community v0.18.0动画工程师，必须严格遵守以下规则：
-    1. 仅使用Manim社区版标准语法，禁止使用第三方扩展库
-    2. 代码必须完整可直接运行，必须定义继承Scene的类
-    3. 动画总时长严格控制在{MAX_ANIMATION_DURATION}秒以内
-    4. ⚠️ 核心约束：代码中必须包含至少一个动画播放动作（例如使用 self.play()，如 self.play(Create(obj))），绝不能仅仅使用 self.add() 添加静态物体，必须保证能渲染出视频！
-    5. 仅输出```python包裹的代码块，不输出任何额外解释文字
-    6. 动态性：必须使用 self.play() 配合 Create, Write, Transform, FadeIn 等动画类。
-    7 视觉优化：合理设置圆的颜色(color)、填充(fill_opacity)、半径(radius)和位置(shift)。
-    8. 逻辑：如果你需要画两个物体，请使用 VGroup 组合它们，并考虑它们出现的先后顺序。
-    9.⚠️ 注释约束：代码注释必须严格如实反映代码功能，禁止在注释中描述代码未实际实现的动画动作。如果无法实现某种视觉效果，直接忽略，严禁在注释中进行虚假描述。
-    10.⚠️ 语法禁令：绝对禁止使用未定义 target 的 MoveToTarget()！推荐直接使用对象自身的 .animate 语法（如 self.play(obj.animate.shift(RIGHT))）。
-    11.⚠️ 严禁滥用循环：绝对禁止在 Python 的 for 循环或 while 循环内部连续调用 self.play()！如果需要展现基于时间步长的物理运动或连续动画，必须使用 obj.add_updater() 配合 self.wait() 来实现，或者使用带有特定 rate_func 的单次 self.play()。
-    12.⚠️ 更新器规则：当使用 add_updater(func) 时，更新函数必须严格接收两个参数：def func(mob, dt):，其中 dt 代表两帧之间的时间步长，绝对禁止使用不存在的 self.dt！
-️  13.轨迹绘制：如果需要展示物体的运动尾迹或轨迹，绝对禁止使用 VGroup 动态添加点，必须使用 TracedPath(obj.get_center) 挂载到物体上，并通过 self.wait() 触发时间流逝。
-    14.⚠️ 物理运动对齐：F若要实现匀加速运动等速度变化的物理场景，若使用 add_updater，必须在函数内部显式地对速度变量进行累加更新（如 v += a * dt），严禁使用固定不变的速度常量计算位移微元。
-    15. ⚠️ 时间场景控制禁令：绝对、永远禁止将 self.wait() 嵌套在 self.play() 内部调用（例如严禁写成 self.play(self.wait(1))）！错误的写法会导致系统报 TypeError 崩溃。
-    16. ⚠️ 正确等待方式：self.wait() 是一个独立的场景控制指令，必须单独成行编写（例如直接写 self.wait(2)），以此来触发时间流逝和 Updater 的物理渲染。
-    17.⚠️ 级数展开规则：严禁使用递归 Lambda 函数或自引用闭包定义级数（例如严禁使用 lambda x: prev_func(x) + term(x)）。必须使用标准的循环累加方式计算泰勒多项式。必须使用 math.factorial 计算阶乘，并预先计算好每一项系数。
-    18. ⚠️ 更新器状态禁令：严禁在 add_updater 的回调函数中使用类似 mob.time 或 mob.velocity 这种未预先定义的属性。如果需要追踪时间或状态，必须且只能使用 ValueTracker 并通过 tracker.get_value() 获取数值。严禁在 mob 对象上随意添加临时属性。
+    ⚠️【最高优先级概念禁令】绝对禁止混淆傅里叶变换与傅里叶级数：
+    - 用户明确说「傅里叶变换」时，必须生成【时域非周期信号 + 连续频域频谱】的双坐标动画（例如矩形脉冲对应sinc函数频谱），必须体现时频对应关系，绝对禁止生成旋转圆圈/本轮/epicycle动画。
+    - 只有用户明确说「傅里叶级数」「本轮动画」「圆圈叠加」时，才可以使用旋转向量分解的形式。
+
+    你是Manim Community v0.18.0动画工程师，严格遵守以下核心规则：
+    1. 仅用Manim社区版标准语法，代码完整可运行，必须定义继承Scene的类
+    2. 动画总时长≤{MAX_ANIMATION_DURATION}秒，必须包含self.play()动画动作，禁止纯静态add
+    3. 仅输出```python包裹的代码块，不输出任何额外解释文字
+    4. 禁止循环内连续调用self.play，物理动画用add_updater配合self.wait实现
+    5. add_updater回调必须接收(mob, dt)两个参数，禁止在mob上挂载自定义属性，状态统一用ValueTracker
+    6. 禁止self.wait嵌套在self.play内，必须独立成行
+    7. 运动轨迹用TracedPath实现，禁止VGroup动态加点
+    8. 级数计算用循环累加+math.factorial，禁止递归lambda自引用
+    9. 禁止使用未定义target的MoveToTarget()，推荐用.animate语法
+    10. 所有可视化动画必须包含清晰的坐标轴与文字标注，禁止无坐标系的纯图形动画
     
-    
+    - 所有 Dot() 参数必须使用二维坐标，例如 Dot(point[:2])，严禁直接传入三维数组
+    - 整个动画渲染时间预估不超过 20 秒，避免大量循环或实时复杂计算
+
     参考资料：
     {references}
     """)
     user_prompt = f"请根据需求生成Manim动画代码：{user_requirement}"
 
-    try:
-        response = requests.post(
-            url=f"{OLLAMA_BASE_URL}/api/chat",
-            json={
-                "model": CODER_MODEL_NAME,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                # 🌟 修改点：把原本裸奔的 temperature 挪进 options 字典，并追加 top_p
-                "options": {
-                    "temperature": LLM_TEMPERATURE,
-                    "top_p": 0.85
-                },
-                "stream": False
-            },
-            timeout=API_REQUEST_TIMEOUT
-        )
-        response.raise_for_status()
-        model_raw_response = response.json()["message"]["content"]
-        manim_code = extract_manim_code(model_raw_response)
-        if not manim_code:
-            return False, f"❌ 未提取到有效Manim代码。原始回复：\n{model_raw_response}"
-        return True, manim_code
-    except Exception as e:
-        return False, f"❌ 大模型调用或解析失败：{str(e)}"
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt}
+    ]
+    success, result = deepseek_chat_request(messages)
+    if not success:
+        return False, result
 
-import ast
+    manim_code = extract_manim_code(result)
+    if not manim_code:
+        return False, f"❌ 未提取到有效Manim代码。原始回复：\n{result}"
+    return True, manim_code
+
 
 def check_latex_violation(code_str: str) -> bool:
-    """使用抽象语法树(AST)静态检测代码中是否包含禁用的 LaTeX 组件"""
     try:
         root = ast.parse(code_str)
         for node in ast.walk(root):
-            # 检查是否有类调用
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
                 if node.func.id in ["MathTex", "Tex"]:
-                    return True # 抓到了 LaTeX 违规调用
+                    return True
         return False
     except:
-        return True # 语法解析失败也视为非法
+        return True
+
+import ast
+import numpy as np
+
+def preflight_code_check(code: str) -> bool:
+    """快速检查常见易错点，不通过则直接返回错误信息，避免无效渲染"""
+    try:
+        tree = ast.parse(code)
+    except SyntaxError as e:
+        return False, f"代码语法错误: {e}"
+
+    # 检查是否有 Dot(point) 且 point 是三维数组
+    # 简单正则匹配可能误判，用 AST 遍历更可靠
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            if node.func.id == 'Dot':
+                # 检查参数是否可能是三维坐标（比如 np.array 或直接列表）
+                for arg in node.args:
+                    # 如果参数是列表或数组，可进一步分析维度（复杂，可先简单规则）
+                    pass
+    # 可以添加更多检查，如 MathTex/Tex 是否存在（如果你环境 LaTeX 不稳定）
+    return True, ""
+
 
 def render_manim_animation(code_str: str) -> Tuple[bool, str, str]:
-    # 🌟 运行前拦截
-    if check_latex_violation(code_str):
-        return False, "❌ 静态拦截失败：检测到代码中使用了禁用的 MathTex/Tex 组件，当前环境无 LaTeX 支持！请改用 Text() 类进行纯文本渲染。", ""
-
     task_id = uuid.uuid4().hex[:8]
-    # ✅ 优化：使用 Path 对象的绝对路径，确保 subprocess 准确找到文件
     code_file_path = CODE_OUTPUT_SUBDIR / f"{task_id}.py"
-    # Manim 强行指定 -o 时的最终输出路径
     video_output_path = VIDEO_OUTPUT_SUBDIR / f"{task_id}.mp4"
 
     try:
@@ -219,8 +284,6 @@ def render_manim_animation(code_str: str) -> Tuple[bool, str, str]:
         if not scene_name:
             return False, "❌ 渲染失败：代码中未找到继承Scene的场景类", ""
 
-        # ✅ 核心修复：使用 sys.executable 确保调用的是当前 Conda 环境的 Python
-        # 相当于在终端执行：E:\Anaconda\...\python.exe -m manim -ql xxx.py SceneName -o xxx.mp4
         render_command = [
             sys.executable,
             "-m", "manim",
@@ -242,7 +305,6 @@ def render_manim_animation(code_str: str) -> Tuple[bool, str, str]:
         full_log = f"=== 标准输出 ===\n{result.stdout}\n=== 错误输出 ===\n{result.stderr}"
 
         if result.returncode == 0 and video_output_path.exists():
-            # ✅ 优化：向前端返回相对URL路径，而不是物理磁盘路径
             web_accessible_url = f"/videos/{task_id}.mp4"
             return True, f"✅ 渲染成功\n{full_log}", web_accessible_url
         else:
@@ -256,53 +318,34 @@ def render_manim_animation(code_str: str) -> Tuple[bool, str, str]:
 
 def fix_manim_code(original_code: str, error_message: str) -> Tuple[bool, str]:
     system_prompt = textwrap.dedent(f"""
-    你是专业的Manim Community v0.18.0调试工程师。
-    严格遵守以下规则：
+    你是Manim Community v0.18.0调试工程师，严格遵守规则：
     1. 保留原有动画功能，仅修复语法错误、导入缺失、API误用问题
-    2. 返回完整的修复后代码，使用```python代码块包裹，不要输出额外解释
-    3. ⚠️ 核心约束：代码中必须包含至少一个动画播放动作（例如使用 self.play()，如 self.play(Create(obj))），绝不能仅仅使用 self.add() 添加静态物体，必须保证能渲染出视频！
-    4.⚠️ 注释约束：代码注释必须严格如实反映代码功能，禁止在注释中描述代码未实际实现的动画动作。如果无法实现某种视觉效果，直接忽略，严禁在注释中进行虚假描述。
-    5.⚠️ 严禁滥用循环：绝对禁止在 Python 的 for 循环或 while 循环内部连续调用 self.play()！如果需要展现基于时间步长的物理运动或连续动画，必须使用 obj.add_updater() 配合 self.wait() 来实现，或者使用带有特定 rate_func 的单次 self.play()。
-    6.⚠️ 更新器规则：当使用 add_updater(func) 时，更新函数必须严格接收两个参数：def func(mob, dt):，其中 dt 代表两帧之间的时间步长，绝对禁止使用不存在的 self.dt！
-️  7.轨迹绘制：如果需要展示物体的运动尾迹或轨迹，绝对禁止使用 VGroup 动态添加点，必须使用 TracedPath(obj.get_center) 挂载到物体上，并通过 self.wait() 触发时间流逝。
-    8.⚠️ 物理运动对齐：若要实现匀加速运动等速度变化的物理场景，若使用 add_updater，必须在函数内部显式地对速度变量进行累加更新（如 v += a * dt），严禁使用固定不变的速度常量计算位移微元。
-    9. ⚠️ 时间场景控制禁令：绝对、永远禁止将 self.wait() 嵌套在 self.play() 内部调用（例如严禁写成 self.play(self.wait(1))）！错误的写法会导致系统报 TypeError 崩溃。
-    10. ⚠️ 正确等待方式：self.wait() 是一个独立的场景控制指令，必须单独成行编写（例如直接写 self.wait(2)），以此来触发时间流逝和 Updater 的物理渲染。
-    11.⚠️ 核心重要约束：当前运行环境未安装 LaTeX 编译系统！绝对禁止在代码中使用任何 MathTex、Tex 组件。对于坐标系 Axes，必须显式将其数字关闭：Axes(x_range=[...], y_range=[...], axis_config={{"include_numbers": False}}) 避免底层编译崩溃。
-    12. ⚠️ 替代方案：如果需要显示任何公式、文字或坐标轴标签，必须且只能使用普通的 Text 类（例如：Text("y = x^2")），并用 .next_to() 进行手动排版。
-    13.⚠️ 级数展开规则：严禁使用递归 Lambda 函数或自引用闭包定义级数（例如严禁使用 lambda x: prev_func(x) + term(x)）。必须使用标准的循环累加方式计算泰勒多项式。必须使用 math.factorial 计算阶乘，并预先计算好每一项系数。
-    
+    2. 返回完整修复后代码，用```python代码块包裹，不输出额外解释
+    3. 必须包含self.play()动画动作，禁止纯静态add
+    4. 禁止循环内连续调用self.play，物理动画用add_updater配合self.wait
+    5. add_updater回调必须接收(mob, dt)，禁止mob自定义属性，用ValueTracker
+    6. self.wait必须独立成行，禁止嵌套在self.play内
+    7. 级数计算用循环累加+math.factorial，禁止递归lambda
+
     报错信息：
     {error_message}
     """)
+
+    system_prompt += "\n重要：修复后代码必须能在 30 秒内完成渲染，禁止使用复杂循环或大量点集运算。"
     user_prompt = f"请修复以下Manim代码：\n```python\n{original_code}\n```"
 
-    try:
-        response = requests.post(
-            url=f"{OLLAMA_BASE_URL}/api/chat",
-            json={
-                "model": CODER_MODEL_NAME,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                # 🌟 修改点：保持一致，锁死修复阶段的概率分布空间
-                "options": {
-                    "temperature": LLM_TEMPERATURE,
-                    "top_p": 0.85
-                },
-                "stream": False
-            },
-            timeout=API_REQUEST_TIMEOUT
-        )
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt}
+    ]
+    success, result = deepseek_chat_request(messages)
+    if not success:
+        return False, result
 
-        response.raise_for_status()
-        fixed_code = extract_manim_code(response.json()["message"]["content"])
-        if not fixed_code:
-            return False, "❌ 未提取到修复后的有效代码"
-        return True, fixed_code
-    except Exception as e:
-        return False, f"❌ 代码修复异常：{str(e)}"
+    fixed_code = extract_manim_code(result)
+    if not fixed_code:
+        return False, "❌ 未提取到修复后的有效代码"
+    return True, fixed_code
 
 
 def run_full_pipeline(user_requirement: str, max_retry: int = DEFAULT_RETRY_TIMES) -> Dict:
@@ -311,6 +354,12 @@ def run_full_pipeline(user_requirement: str, max_retry: int = DEFAULT_RETRY_TIME
     all_logs = []
 
     try:
+        # 优先命中缓存
+        cached = get_cached_result(user_requirement)
+        if cached:
+            cached["log"] = "✅ 命中本地缓存，极速返回\n" + cached["log"]
+            return cached
+
         gen_success, gen_result = generate_manim_code(user_requirement)
         result["try_count"] = 1
         if not gen_success:
@@ -325,6 +374,7 @@ def run_full_pipeline(user_requirement: str, max_retry: int = DEFAULT_RETRY_TIME
 
         if render_success:
             result.update({"success": True, "video_path": video_path, "log": "\n".join(all_logs)})
+            save_to_cache(user_requirement, result)
             return result
 
         for retry_index in range(1, max_retry + 1):
@@ -347,6 +397,8 @@ def run_full_pipeline(user_requirement: str, max_retry: int = DEFAULT_RETRY_TIME
 
             if render_success:
                 result.update({"success": True, "video_path": video_path, "log": "\n".join(all_logs)})
+                if result["success"]:
+                    save_to_cache(user_requirement, result)
                 return result
 
         all_logs.append(f"❌ 达到最大重试次数 {max_retry}，任务终止。")
