@@ -1,0 +1,51 @@
+from manim import *
+import math
+
+class UniformTaylorSeries(Scene):
+    def construct(self):
+        # 🌟 关键点：显式关闭 include_numbers，彻底切断对 LaTeX 的依赖
+        axes = Axes(
+            x_range=[-6, 6, 1],
+            y_range=[-3, 3, 1],
+            axis_config={"color": GRAY, "include_numbers": False} # 绝对不画刻度数字
+        )
+
+        # 目标函数：正弦波
+        sin_graph = axes.plot(lambda x: math.sin(x), color=BLUE, stroke_width=4)
+        label_sin = Text("目标曲线: sin(x)", font_size=24, color=BLUE).to_corner(UL)
+
+        self.play(Create(axes), Create(sin_graph), Write(label_sin))
+        self.wait(0.5)
+
+        # 泰勒展开多项式生成逻辑
+        def get_taylor_poly(n_terms):
+            def func(x):
+                res = 0
+                for i in range(n_terms):
+                    sign = (-1)**i
+                    power = 2 * i + 1
+                    res += sign * (x**power) / math.factorial(power)
+                return res
+            return axes.plot(func, color=YELLOW, stroke_width=4)
+
+        # 1 阶逼近 (一条直线)
+        current_taylor = get_taylor_poly(1)
+        label_term = Text("泰勒展开阶数: 1", font_size=24, color=YELLOW).next_to(label_sin, DOWN, aligned_edge=LEFT)
+
+        self.play(Create(current_taylor), Write(label_term))
+        self.wait(1)
+
+        # 动态阶数平滑变形变换
+        for terms in [2, 3, 5]:
+            new_taylor = get_taylor_poly(terms)
+            new_label = Text(f"泰勒展开阶数: {2*terms-1}", font_size=24, color=YELLOW).move_to(label_term.get_center())
+
+            # 优雅的形变过渡
+            self.play(
+                Transform(current_taylor, new_taylor),
+                Transform(label_term, new_label),
+                run_time=1.5
+            )
+            self.wait(0.5)
+
+        self.wait(1)

@@ -11,11 +11,24 @@ from typing import List, Dict, Optional, Tuple
 import textwrap
 from pathlib import Path  # ✅ 优化：引入 Pathlib 解决跨平台路径拼接痛点
 
+import os
+import sys
+
+# 🌟 强行将 MiKTeX 的安装路径注入到当前进程的 PATH 中
+# 请根据你 MiKTeX 的实际安装路径调整，通常在以下两个路径之一：
+# 路径A（标准安装）：r"C:\Program Files\MiKTeX\miktex\bin\x64"
+# 路径B（仅为当前用户安装）：fr"C:\Users\{os.getlogin()}\AppData\Local\Programs\MiKTeX\miktex\bin\x64"
+
+miktex_path = fr"C:\Users\{os.getlogin()}\AppData\Local\Programs\MiKTeX\miktex\bin\x64" # 或者是路径A
+
+if miktex_path not in os.environ["PATH"]:
+    os.environ["PATH"] = miktex_path + os.pathsep + os.environ["PATH"]
+
 # ===================== 全局配置常量 =====================
 OLLAMA_BASE_URL: str = "http://localhost:11434"
-CODER_MODEL_NAME: str = "qwen2.5-coder:7b-instruct-q4_K_M"
+CODER_MODEL_NAME: str = "qwen2.5-coder:7b-instruct"
 EMBEDDING_MODEL_NAME: str = "nomic-embed-text"
-LLM_TEMPERATURE: float = 0.2
+LLM_TEMPERATURE: float = 0.1
 API_REQUEST_TIMEOUT: int = 60
 
 CHROMA_PERSIST_DIR: str = "chroma_db"
@@ -129,7 +142,17 @@ def generate_manim_code(user_requirement: str) -> Tuple[bool, str]:
     7 视觉优化：合理设置圆的颜色(color)、填充(fill_opacity)、半径(radius)和位置(shift)。
     8. 逻辑：如果你需要画两个物体，请使用 VGroup 组合它们，并考虑它们出现的先后顺序。
     9.⚠️ 注释约束：代码注释必须严格如实反映代码功能，禁止在注释中描述代码未实际实现的动画动作。如果无法实现某种视觉效果，直接忽略，严禁在注释中进行虚假描述。
-
+    10.⚠️ 语法禁令：绝对禁止使用未定义 target 的 MoveToTarget()！推荐直接使用对象自身的 .animate 语法（如 self.play(obj.animate.shift(RIGHT))）。
+    11.⚠️ 严禁滥用循环：绝对禁止在 Python 的 for 循环或 while 循环内部连续调用 self.play()！如果需要展现基于时间步长的物理运动或连续动画，必须使用 obj.add_updater() 配合 self.wait() 来实现，或者使用带有特定 rate_func 的单次 self.play()。
+    12.⚠️ 更新器规则：当使用 add_updater(func) 时，更新函数必须严格接收两个参数：def func(mob, dt):，其中 dt 代表两帧之间的时间步长，绝对禁止使用不存在的 self.dt！
+️  13.轨迹绘制：如果需要展示物体的运动尾迹或轨迹，绝对禁止使用 VGroup 动态添加点，必须使用 TracedPath(obj.get_center) 挂载到物体上，并通过 self.wait() 触发时间流逝。
+    14.⚠️ 物理运动对齐：F若要实现匀加速运动等速度变化的物理场景，若使用 add_updater，必须在函数内部显式地对速度变量进行累加更新（如 v += a * dt），严禁使用固定不变的速度常量计算位移微元。
+    15. ⚠️ 时间场景控制禁令：绝对、永远禁止将 self.wait() 嵌套在 self.play() 内部调用（例如严禁写成 self.play(self.wait(1))）！错误的写法会导致系统报 TypeError 崩溃。
+    16. ⚠️ 正确等待方式：self.wait() 是一个独立的场景控制指令，必须单独成行编写（例如直接写 self.wait(2)），以此来触发时间流逝和 Updater 的物理渲染。
+    17.⚠️ 级数展开规则：严禁使用递归 Lambda 函数或自引用闭包定义级数（例如严禁使用 lambda x: prev_func(x) + term(x)）。必须使用标准的循环累加方式计算泰勒多项式。必须使用 math.factorial 计算阶乘，并预先计算好每一项系数。
+    18. ⚠️ 更新器状态禁令：严禁在 add_updater 的回调函数中使用类似 mob.time 或 mob.velocity 这种未预先定义的属性。如果需要追踪时间或状态，必须且只能使用 ValueTracker 并通过 tracker.get_value() 获取数值。严禁在 mob 对象上随意添加临时属性。
+    
+    
     参考资料：
     {references}
     """)
@@ -144,7 +167,11 @@ def generate_manim_code(user_requirement: str) -> Tuple[bool, str]:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                "temperature": LLM_TEMPERATURE,
+                # 🌟 修改点：把原本裸奔的 temperature 挪进 options 字典，并追加 top_p
+                "options": {
+                    "temperature": LLM_TEMPERATURE,
+                    "top_p": 0.85
+                },
                 "stream": False
             },
             timeout=API_REQUEST_TIMEOUT
@@ -158,8 +185,26 @@ def generate_manim_code(user_requirement: str) -> Tuple[bool, str]:
     except Exception as e:
         return False, f"❌ 大模型调用或解析失败：{str(e)}"
 
+import ast
+
+def check_latex_violation(code_str: str) -> bool:
+    """使用抽象语法树(AST)静态检测代码中是否包含禁用的 LaTeX 组件"""
+    try:
+        root = ast.parse(code_str)
+        for node in ast.walk(root):
+            # 检查是否有类调用
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                if node.func.id in ["MathTex", "Tex"]:
+                    return True # 抓到了 LaTeX 违规调用
+        return False
+    except:
+        return True # 语法解析失败也视为非法
 
 def render_manim_animation(code_str: str) -> Tuple[bool, str, str]:
+    # 🌟 运行前拦截
+    if check_latex_violation(code_str):
+        return False, "❌ 静态拦截失败：检测到代码中使用了禁用的 MathTex/Tex 组件，当前环境无 LaTeX 支持！请改用 Text() 类进行纯文本渲染。", ""
+
     task_id = uuid.uuid4().hex[:8]
     # ✅ 优化：使用 Path 对象的绝对路径，确保 subprocess 准确找到文件
     code_file_path = CODE_OUTPUT_SUBDIR / f"{task_id}.py"
@@ -217,6 +262,15 @@ def fix_manim_code(original_code: str, error_message: str) -> Tuple[bool, str]:
     2. 返回完整的修复后代码，使用```python代码块包裹，不要输出额外解释
     3. ⚠️ 核心约束：代码中必须包含至少一个动画播放动作（例如使用 self.play()，如 self.play(Create(obj))），绝不能仅仅使用 self.add() 添加静态物体，必须保证能渲染出视频！
     4.⚠️ 注释约束：代码注释必须严格如实反映代码功能，禁止在注释中描述代码未实际实现的动画动作。如果无法实现某种视觉效果，直接忽略，严禁在注释中进行虚假描述。
+    5.⚠️ 严禁滥用循环：绝对禁止在 Python 的 for 循环或 while 循环内部连续调用 self.play()！如果需要展现基于时间步长的物理运动或连续动画，必须使用 obj.add_updater() 配合 self.wait() 来实现，或者使用带有特定 rate_func 的单次 self.play()。
+    6.⚠️ 更新器规则：当使用 add_updater(func) 时，更新函数必须严格接收两个参数：def func(mob, dt):，其中 dt 代表两帧之间的时间步长，绝对禁止使用不存在的 self.dt！
+️  7.轨迹绘制：如果需要展示物体的运动尾迹或轨迹，绝对禁止使用 VGroup 动态添加点，必须使用 TracedPath(obj.get_center) 挂载到物体上，并通过 self.wait() 触发时间流逝。
+    8.⚠️ 物理运动对齐：若要实现匀加速运动等速度变化的物理场景，若使用 add_updater，必须在函数内部显式地对速度变量进行累加更新（如 v += a * dt），严禁使用固定不变的速度常量计算位移微元。
+    9. ⚠️ 时间场景控制禁令：绝对、永远禁止将 self.wait() 嵌套在 self.play() 内部调用（例如严禁写成 self.play(self.wait(1))）！错误的写法会导致系统报 TypeError 崩溃。
+    10. ⚠️ 正确等待方式：self.wait() 是一个独立的场景控制指令，必须单独成行编写（例如直接写 self.wait(2)），以此来触发时间流逝和 Updater 的物理渲染。
+    11.⚠️ 核心重要约束：当前运行环境未安装 LaTeX 编译系统！绝对禁止在代码中使用任何 MathTex、Tex 组件。对于坐标系 Axes，必须显式将其数字关闭：Axes(x_range=[...], y_range=[...], axis_config={{"include_numbers": False}}) 避免底层编译崩溃。
+    12. ⚠️ 替代方案：如果需要显示任何公式、文字或坐标轴标签，必须且只能使用普通的 Text 类（例如：Text("y = x^2")），并用 .next_to() 进行手动排版。
+    13.⚠️ 级数展开规则：严禁使用递归 Lambda 函数或自引用闭包定义级数（例如严禁使用 lambda x: prev_func(x) + term(x)）。必须使用标准的循环累加方式计算泰勒多项式。必须使用 math.factorial 计算阶乘，并预先计算好每一项系数。
     
     报错信息：
     {error_message}
@@ -232,11 +286,16 @@ def fix_manim_code(original_code: str, error_message: str) -> Tuple[bool, str]:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                "temperature": LLM_TEMPERATURE,
+                # 🌟 修改点：保持一致，锁死修复阶段的概率分布空间
+                "options": {
+                    "temperature": LLM_TEMPERATURE,
+                    "top_p": 0.85
+                },
                 "stream": False
             },
             timeout=API_REQUEST_TIMEOUT
         )
+
         response.raise_for_status()
         fixed_code = extract_manim_code(response.json()["message"]["content"])
         if not fixed_code:
