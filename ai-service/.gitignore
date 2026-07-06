@@ -1,0 +1,23 @@
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# 向量库（可重新生成，不提交）
+chroma_db/
+
+# 渲染输出与媒体文件
+output/
+media/
+*.mp4
+*.avi
+*.png
+
+# 临时文件
+*.log
+*.tmp
+temp_*.py
+
+# IDE配置
+.idea/
+.vscode/
