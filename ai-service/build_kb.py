@@ -20,7 +20,7 @@ CHROMA_PERSIST_DIR: str = "chroma_db"
 # 向量库集合名称
 COLLECTION_NAME: str = "manim_animation_kb"
 # 支持读取的文件类型
-SUPPORTED_EXTENSIONS: tuple = (".md", ".txt", ".py")
+SUPPORTED_EXTENSIONS: tuple = (".md", ".txt", ".py", ".ipynb")
 # Ollama 嵌入模型接口地址
 OLLAMA_BASE_URL: str = "http://localhost:11434"
 EMBEDDING_MODEL: str = "nomic-embed-text"
@@ -62,7 +62,10 @@ def traverse_kb_files(root_dir: str) -> tuple[List[str], List[Dict], List[str]]:
             # 筛选支持的文件类型
             if file.lower().endswith(SUPPORTED_EXTENSIONS):
                 file_path = os.path.join(root, file).replace("\\", "/")  # 统一正斜杠
-                content = load_file_content(file_path)
+                if file.lower().endswith(".ipynb"):
+                    content = load_ipynb_content(file_path)
+                else:
+                    content = load_file_content(file_path)
 
                 # 跳过空内容文件
                 if not content:
@@ -88,16 +91,42 @@ def get_ollama_embedding(text: str) -> List[float]:
     """
     try:
         response = requests.post(
-            url=f"{OLLAMA_BASE_URL}/api/embeddings",
-            json={"model": EMBEDDING_MODEL, "prompt": text},
-            timeout=REQUEST_TIMEOUT
+            f"{OLLAMA_BASE_URL}/api/embed",  # 使用你顶部定义的常量
+            json={
+                "model": EMBEDDING_MODEL,
+                "input": text
+            }
         )
-        response.raise_for_status()  # 抛出HTTP异常
-        return response.json()["embedding"]
+
+        # 优化：打印出真实的报错内容，不再盲猜
+        if response.status_code != 200:
+            print(f"❌ Ollama 返回错误详情：{response.text}")
+            response.raise_for_status()
+
+            # ✅ 关键修改：提取 "embeddings" 数组的第一个元素
+        return response.json()["embeddings"][0]
+
     except requests.exceptions.RequestException as e:
         print(f"❌ Ollama嵌入模型调用失败，错误信息：{str(e)}")
         return []
 
+import json
+
+def load_ipynb_content(file_path: str) -> str:
+    """提取 Notebook 中的纯文本和代码"""
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            notebook = json.load(f)
+            content_parts = []
+            for cell in notebook.get("cells", []):
+                # 提取源码或 Markdown 文本
+                source = "".join(cell.get("source", []))
+                if source.strip():
+                    content_parts.append(source)
+            return "\n".join(content_parts)
+    except Exception as e:
+        print(f"❌ Notebook 读取失败：{file_path}，错误信息：{str(e)}")
+        return ""
 
 def build_knowledge_base() -> None:
     """
@@ -138,22 +167,35 @@ def build_knowledge_base() -> None:
 
         # 4. 批量生成嵌入向量
         print("🔢 开始生成向量嵌入...")
-        embeddings = []
+
+        valid_documents = []
+        valid_metadatas = []
+        valid_ids = []
+        valid_embeddings = []
+
         for idx, text in enumerate(documents):
             embed = get_ollama_embedding(text)
             if not embed:
                 print(f"⚠️ 文档 {ids[idx]} 向量生成失败，已跳过")
                 continue
-            embeddings.append(embed)
+
+            # 只有成功生成向量的文档，才会被加入最终列表
+            valid_embeddings.append(embed)
+            valid_documents.append(text)
+            valid_metadatas.append(metadatas[idx])
+            valid_ids.append(ids[idx])
 
         # 5. 批量存入向量库
         print("💾 开始存入向量数据库...")
-        collection.add(
-            documents=documents,
-            metadatas=metadatas,
-            ids=ids,
-            embeddings=embeddings
-        )
+        if valid_ids:  # 确保列表不为空，否则插入会报错
+            collection.add(
+                documents=valid_documents,
+                metadatas=valid_metadatas,
+                ids=valid_ids,
+                embeddings=valid_embeddings
+            )
+        else:
+            print("⚠️ 所有文档向量化均失败，无可入库数据！")
 
         # 6. 统计耗时
         cost_time = round(time.time() - start_time, 2)
@@ -166,6 +208,8 @@ def build_knowledge_base() -> None:
 
     except Exception as e:
         print(f"❌ 知识库构建全局异常：{str(e)}")
+
+
 
 
 if __name__ == "__main__":
