@@ -5,13 +5,11 @@
 
     <!-- 基础结果映射 -->
     <resultMap id="BaseResultMap" type="com.manim.pojo.Task">
-        <id column="id" property="id" jdbcType="BIGINT"/>
+        <id column="id" property="id" jdbcType="INTEGER"/>
+        <result column="user_id" property="userId" jdbcType="INTEGER"/>
         <result column="user_input" property="userInput" jdbcType="VARCHAR"/>
-        <result column="max_retry" property="maxRetry" jdbcType="INTEGER"/>
-        <result column="status" property="status" jdbcType="INTEGER"/>
-        <result column="generated_code" property="generatedCode" jdbcType="VARCHAR"/>
-        <result column="video_url" property="videoUrl" jdbcType="VARCHAR"/>
-        <result column="try_count" property="tryCount" jdbcType="INTEGER"/>
+        <result column="video_path" property="videoPath" jdbcType="VARCHAR"/>
+        <result column="status" property="status" jdbcType="TINYINT"/>
         <result column="error_log" property="errorLog" jdbcType="VARCHAR"/>
         <result column="create_time" property="createTime" jdbcType="TIMESTAMP"/>
         <result column="update_time" property="updateTime" jdbcType="TIMESTAMP"/>
@@ -19,8 +17,7 @@
 
     <!-- 通用查询列 -->
     <sql id="BaseColumns">
-        id, user_input, max_retry, status, generated_code, video_url,
-        try_count, error_log, create_time, update_time
+        id, user_id, user_input, video_path, status, error_log, create_time, update_time
     </sql>
 
 </mapper>

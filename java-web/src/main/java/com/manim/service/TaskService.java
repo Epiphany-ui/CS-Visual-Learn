@@ -12,19 +12,20 @@ public interface TaskService {
     /**
      * 提交新任务（入库后异步生成）
      *
+     * @param userId    所属用户ID
      * @param userInput 用户需求文本
-     * @param maxRetry  最大重试次数
+     * @param maxRetry  最大重试次数（默认 3，传给 Python 服务）
      * @return 新任务 ID
      */
-    Long submitTask(String userInput, Integer maxRetry);
+    Integer submitTask(Integer userId, String userInput, Integer maxRetry);
 
     /**
      * 根据 ID 查询任务
      */
-    Task getTaskById(Long id);
+    Task getTaskById(Integer id);
 
     /**
-     * 查询全部历史任务（按创建时间倒序）
+     * 查询指定用户的全部历史任务（按创建时间倒序）
      */
-    List<Task> listAllTasks();
+    List<Task> listTasksByUserId(Integer userId);
 }

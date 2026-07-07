@@ -1,11 +1,11 @@
 package com.manim.filter;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.manim.pojo.Result;
 import com.manim.utils.JwtUtil;
+import com.manim.utils.UserContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
 import org.springframework.util.AntPathMatcher;
 
 import javax.servlet.*;
@@ -18,26 +18,23 @@ import java.util.List;
 /**
  * JWT 认证过滤器
  * <p>
- * 拦截 /api/* 路径，对白名单内的请求放行，
- * 其余请求校验请求头中的 Bearer token。
+ * 白名单路径（/api/register, /api/login）直接放行；
+ * 其余 /api/* 请求校验 Authorization: Bearer token，
+ * 校验通过后将用户名写入 {@link UserContext}，供后续 Controller 使用。
  * </p>
  */
-@Component
 public class AuthFilter implements Filter {
 
     private static final Logger log = LoggerFactory.getLogger(AuthFilter.class);
 
-    /** 路径匹配器，支持 Ant 风格模式 */
     private static final AntPathMatcher pathMatcher = new AntPathMatcher();
 
-    /** 放行白名单（不需要 token 的路径） */
     private static final List<String> WHITELIST = Arrays.asList(
-            "/api/auth/login",
-            "/api/auth/register"
+            "/api/register",
+            "/api/login"
     );
 
-    @Autowired
-    private JwtUtil jwtUtil;
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
     public void doFilter(ServletRequest servletRequest,
@@ -49,37 +46,50 @@ public class AuthFilter implements Filter {
         HttpServletResponse response = (HttpServletResponse) servletResponse;
         String requestPath = request.getRequestURI();
 
-        // 1. 白名单路径直接放行
-        if (isWhitelisted(requestPath)) {
+        try {
+            // 白名单路径直接放行
+            if (isWhitelisted(requestPath)) {
+                filterChain.doFilter(request, response);
+                return;
+            }
+
+            // 校验 Authorization 头
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                writeJsonResponse(response, 401, "缺少 Authorization 请求头，需使用 Bearer <token> 格式");
+                return;
+            }
+
+            String token = authHeader.substring(7);
+            String username = JwtUtil.getUsernameFromToken(token);
+
+            if (username == null) {
+                writeJsonResponse(response, 401, "JWT 令牌无效或已过期，请重新登录");
+                return;
+            }
+
+            // 将用户名写入 ThreadLocal
+            UserContext.setUsername(username);
+            log.debug("JWT 校验通过, username={}, path={}", username, requestPath);
+
             filterChain.doFilter(request, response);
-            return;
+
+        } finally {
+            // 请求结束，清理 ThreadLocal 防止内存泄漏
+            UserContext.remove();
         }
-
-        // 2. 从请求头获取 token
-        String authHeader = request.getHeader("Authorization");
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            writeUnauthorized(response, "缺少 Authorization 请求头或格式错误，需使用 Bearer <token>");
-            return;
-        }
-
-        String token = authHeader.substring(7);
-
-        // 3. 校验 token
-        String userId = jwtUtil.getUserIdFromToken(token);
-        if (userId == null) {
-            writeUnauthorized(response, "JWT 令牌无效或已过期，请重新登录");
-            return;
-        }
-
-        // 4. token 有效：将用户信息存入 request 属性，供后续 Controller 使用
-        request.setAttribute("userId", userId);
-        log.debug("JWT 校验通过，userId={}, path={}", userId, requestPath);
-        filterChain.doFilter(request, response);
     }
 
     /**
-     * 判断请求路径是否在白名单中
+     * 返回统一格式的 JSON 错误响应
      */
+    private void writeJsonResponse(HttpServletResponse response, int code, String msg) throws IOException {
+        response.setContentType("application/json;charset=UTF-8");
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        String json = objectMapper.writeValueAsString(Result.fail(code, msg));
+        response.getWriter().write(json);
+    }
+
     private boolean isWhitelisted(String path) {
         for (String pattern : WHITELIST) {
             if (pathMatcher.match(pattern, path)) {
@@ -89,17 +99,13 @@ public class AuthFilter implements Filter {
         return false;
     }
 
-    /**
-     * 返回 401 未授权响应
-     */
-    private void writeUnauthorized(HttpServletResponse response, String message) throws IOException {
-        response.setContentType("application/json;charset=UTF-8");
-        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+    @Override
+    public void init(FilterConfig filterConfig) {
+        // 无需初始化
+    }
 
-        String json = String.format(
-                "{\"code\":401,\"msg\":\"%s\",\"data\":null}",
-                message
-        );
-        response.getWriter().write(json);
+    @Override
+    public void destroy() {
+        // 无需销毁
     }
 }

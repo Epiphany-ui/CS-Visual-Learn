@@ -12,13 +12,6 @@ spring:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: Asia/Shanghai
 
-  thymeleaf:
-    prefix: classpath:/templates/
-    suffix: .html
-    cache: false
-    encoding: UTF-8
-    mode: HTML
-
   task:
     execution:
       pool:

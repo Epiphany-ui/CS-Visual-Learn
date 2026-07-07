@@ -4,6 +4,7 @@ import cn.hutool.http.HttpRequest;
 import cn.hutool.http.HttpResponse;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.manim.dto.PythonResponse;
 import com.manim.mapper.TaskMapper;
 import com.manim.pojo.Task;
@@ -35,58 +36,44 @@ public class TaskServiceImpl implements TaskService {
     @Value("${manim.ai.generate-endpoint}")
     private String generateEndpoint;
 
-    @Value("${manim.ai.connect-timeout}")
-    private int connectTimeout;
-
     @Value("${manim.ai.read-timeout}")
     private int readTimeout;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Long submitTask(String userInput, Integer maxRetry) {
-        // 1. 创建任务记录，状态为 0-等待中
+    public Integer submitTask(Integer userId, String userInput, Integer maxRetry) {
+        // 创建任务记录，status=0（处理中）
         Task task = new Task();
+        task.setUserId(userId);
         task.setUserInput(userInput);
-        task.setMaxRetry(maxRetry != null ? maxRetry : 3);
         task.setStatus(0);
-        task.setTryCount(0);
         taskMapper.insert(task);
 
-        // 2. 异步调用 Python 服务渲染（不阻塞当前请求）
-        Long taskId = task.getId();
-        asyncRender(taskId, userInput, task.getMaxRetry());
+        // 异步调用 Python 服务渲染
+        Integer taskId = task.getId();
+        asyncRender(taskId, userInput, maxRetry != null ? maxRetry : 3);
 
         return taskId;
     }
 
     @Override
-    public Task getTaskById(Long id) {
+    public Task getTaskById(Integer id) {
         return taskMapper.selectById(id);
     }
 
     @Override
-    public List<Task> listAllTasks() {
-        return taskMapper.selectList(null);
+    public List<Task> listTasksByUserId(Integer userId) {
+        QueryWrapper<Task> qw = new QueryWrapper<>();
+        qw.eq("user_id", userId)
+           .orderByDesc("create_time");
+        return taskMapper.selectList(qw);
     }
 
     // ==================== 异步调用 Python 服务 ====================
 
-    /**
-     * 异步调用 Python AI 服务生成动画
-     */
     @Async
-    public void asyncRender(Long taskId, String userInput, Integer maxRetry) {
-        // 1. 更新状态为 1-生成中
-        Task task = taskMapper.selectById(taskId);
-        if (task == null) {
-            log.error("任务不存在，taskId={}", taskId);
-            return;
-        }
-        task.setStatus(1);
-        taskMapper.updateById(task);
-
+    public void asyncRender(Integer taskId, String userInput, Integer maxRetry) {
         try {
-            // 2. 构建请求 JSON
             JSONObject requestBody = JSONUtil.createObj()
                     .set("user_input", userInput)
                     .set("max_retry", maxRetry);
@@ -94,7 +81,6 @@ public class TaskServiceImpl implements TaskService {
             String url = aiBaseUrl + generateEndpoint;
             log.info("调用 Python AI 服务: POST {}, 请求体: {}", url, requestBody);
 
-            // 3. 发送 HTTP 请求（Hutool）
             HttpResponse response = HttpRequest.post(url)
                     .header("Content-Type", "application/json")
                     .body(requestBody.toString())
@@ -105,9 +91,8 @@ public class TaskServiceImpl implements TaskService {
             String responseBody = response.body();
             log.info("Python 服务响应状态码: {}, 响应体: {}", httpStatus, responseBody);
 
-            // 4. 解析响应
             if (httpStatus != 200) {
-                markTaskFailed(taskId, "Python 服务返回异常状态码: " + httpStatus + ", 响应: " + responseBody);
+                markTaskFailed(taskId, "Python 服务返回异常状态码: " + httpStatus);
                 return;
             }
 
@@ -120,33 +105,25 @@ public class TaskServiceImpl implements TaskService {
         }
     }
 
-    /**
-     * 根据 Python 返回结果更新任务
-     */
-    private void updateTaskFromPythonResponse(Long taskId, PythonResponse resp) {
+    private void updateTaskFromPythonResponse(Integer taskId, PythonResponse resp) {
         Task task = taskMapper.selectById(taskId);
         if (task == null) return;
 
-        task.setGeneratedCode(resp.getCode());
-        task.setTryCount(resp.getTryCount());
         task.setErrorLog(resp.getLog());
 
         if (resp.isSuccess()) {
-            task.setStatus(2); // 成功
-            task.setVideoUrl(resp.getVideoPath());
+            task.setStatus(1);               // 成功
+            task.setVideoPath(resp.getVideoPath());
         } else {
-            task.setStatus(3); // 失败
+            task.setStatus(2);               // 失败
         }
         taskMapper.updateById(task);
     }
 
-    /**
-     * 标记任务为失败状态
-     */
-    private void markTaskFailed(Long taskId, String errorMsg) {
+    private void markTaskFailed(Integer taskId, String errorMsg) {
         Task task = taskMapper.selectById(taskId);
         if (task == null) return;
-        task.setStatus(3);
+        task.setStatus(2);                   // 失败
         task.setErrorLog(errorMsg);
         taskMapper.updateById(task);
     }

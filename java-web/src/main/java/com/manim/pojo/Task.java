@@ -7,36 +7,34 @@ import java.time.LocalDateTime;
 
 /**
  * 动画生成任务实体
+ * <p>
+ * 对应 database.sql 中 task 表结构：
+ * id, user_id, user_input, video_path, status, error_log, create_time, update_time
+ * </p>
  */
 @TableName("task")
 public class Task {
 
-    /** 主键自增 */
+    /** 任务主键ID（INT自增） */
     @TableId(type = IdType.AUTO)
-    private Long id;
+    private Integer id;
 
-    /** 用户需求文本 */
+    /** 所属用户id，关联 user 表 */
+    private Integer userId;
+
+    /** 用户输入动画需求 */
     private String userInput;
 
-    /** 最大重试次数 */
-    private Integer maxRetry;
+    /** 本地视频文件路径 */
+    private String videoPath;
 
     /**
      * 任务状态
-     * 0-等待中，1-生成中，2-成功，3-失败
+     * 0-处理中，1-成功，2-失败
      */
     private Integer status;
 
-    /** 生成的 Manim 代码 */
-    private String generatedCode;
-
-    /** 视频访问路径 */
-    private String videoUrl;
-
-    /** 实际重试次数 */
-    private Integer tryCount;
-
-    /** 错误日志 */
+    /** 失败错误日志 */
     private String errorLog;
 
     /** 创建时间 */
@@ -51,12 +49,20 @@ public class Task {
 
     // ===== getters & setters =====
 
-    public Long getId() {
+    public Integer getId() {
         return id;
     }
 
-    public void setId(Long id) {
+    public void setId(Integer id) {
         this.id = id;
+    }
+
+    public Integer getUserId() {
+        return userId;
+    }
+
+    public void setUserId(Integer userId) {
+        this.userId = userId;
     }
 
     public String getUserInput() {
@@ -67,12 +73,12 @@ public class Task {
         this.userInput = userInput;
     }
 
-    public Integer getMaxRetry() {
-        return maxRetry;
+    public String getVideoPath() {
+        return videoPath;
     }
 
-    public void setMaxRetry(Integer maxRetry) {
-        this.maxRetry = maxRetry;
+    public void setVideoPath(String videoPath) {
+        this.videoPath = videoPath;
     }
 
     public Integer getStatus() {
@@ -81,30 +87,6 @@ public class Task {
 
     public void setStatus(Integer status) {
         this.status = status;
-    }
-
-    public String getGeneratedCode() {
-        return generatedCode;
-    }
-
-    public void setGeneratedCode(String generatedCode) {
-        this.generatedCode = generatedCode;
-    }
-
-    public String getVideoUrl() {
-        return videoUrl;
-    }
-
-    public void setVideoUrl(String videoUrl) {
-        this.videoUrl = videoUrl;
-    }
-
-    public Integer getTryCount() {
-        return tryCount;
-    }
-
-    public void setTryCount(Integer tryCount) {
-        this.tryCount = tryCount;
     }
 
     public String getErrorLog() {

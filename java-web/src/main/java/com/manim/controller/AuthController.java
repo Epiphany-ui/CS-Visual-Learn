@@ -1,7 +1,11 @@
 package com.manim.controller;
 
+import com.manim.exception.BusinessException;
 import com.manim.pojo.Result;
+import com.manim.pojo.User;
+import com.manim.service.UserService;
 import com.manim.utils.JwtUtil;
+import com.manim.utils.Md5Util;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,44 +15,79 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 认证控制器（登录/注册，无需 token 即可访问）
+ * 用户账号接口（白名单，无须 token）
  */
-@Tag(name = "认证接口")
+@Tag(name = "用户账号接口")
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/api")
 public class AuthController {
 
     @Autowired
-    private JwtUtil jwtUtil;
+    private UserService userService;
 
-    /**
-     * 登录接口
-     * <p>
-     * 接收用户名和密码，校验通过后返回 JWT 令牌。
-     * （当前为简易实现，密码校验逻辑可后续扩展）
-     * </p>
-     */
-    @Operation(summary = "用户登录", description = "用户登录获取 JWT 令牌")
+    @Operation(summary = "用户注册")
+    @PostMapping("/register")
+    public Result<Map<String, Object>> register(
+            @RequestParam("username") String username,
+            @RequestParam("password") String password) {
+
+        if (username == null || username.trim().isEmpty()) {
+            throw new BusinessException("用户名不能为空");
+        }
+        if (password == null || password.length() < 6) {
+            throw new BusinessException("密码不能少于6位");
+        }
+
+        // 校验账号是否重复
+        User exist = userService.findByUsername(username.trim());
+        if (exist != null) {
+            throw new BusinessException("账号已存在");
+        }
+
+        // MD5 加密 + 创建用户
+        String encryptedPwd = Md5Util.md5(password);
+        User user = new User();
+        user.setUsername(username.trim());
+        user.setPassword(encryptedPwd);
+        userService.register(user);
+
+        // 生成 JWT 令牌（claim 中是用户名）
+        String token = JwtUtil.generateToken(user.getUsername());
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("token", token);
+        data.put("username", user.getUsername());
+        data.put("userId", user.getId());
+
+        return Result.success("注册成功", data);
+    }
+
+    @Operation(summary = "用户登录")
     @PostMapping("/login")
     public Result<Map<String, Object>> login(
             @RequestParam("username") String username,
             @RequestParam("password") String password) {
 
-        // 参数校验
         if (username == null || username.trim().isEmpty()) {
-            return Result.fail("用户名不能为空");
+            throw new BusinessException("用户名不能为空");
+        }
+        if (password == null || password.isEmpty()) {
+            throw new BusinessException("密码不能为空");
         }
 
-        // TODO: 后续可扩展为从数据库查询用户信息并校验密码
-        // 当前简化为：只要用户名不为空，登录成功（生产环境请替换为真实校验）
+        // 查询用户 + MD5 密码匹配
+        User user = userService.login(username.trim(), Md5Util.md5(password));
+        if (user == null) {
+            throw new BusinessException("用户名或密码错误");
+        }
 
-        // 生成 JWT 令牌
-        String token = jwtUtil.generateToken(username.trim());
+        // 生成 JWT 令牌（claim 中是用户名）
+        String token = JwtUtil.generateToken(user.getUsername());
 
-        // 组装返回数据
         Map<String, Object> data = new HashMap<>();
         data.put("token", token);
-        data.put("username", username.trim());
+        data.put("username", user.getUsername());
+        data.put("userId", user.getId());
 
         return Result.success("登录成功", data);
     }
