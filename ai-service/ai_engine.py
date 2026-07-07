@@ -230,6 +230,17 @@ def generate_manim_code(user_requirement: str) -> Tuple[bool, str]:
     参考资料：
     {references}
     """)
+    # 在原有 system_prompt 末尾追加
+    system_prompt += textwrap.dedent("""
+        ⚠️【环境适配铁律】必须严格遵守：
+        1. 绝对禁止在 MathTex、Tex、get_axis_labels 等任何 LaTeX 上下文中使用中文、Unicode 字符（如 ω、σ、ϕ 等）。所有文本标签必须使用 Text()，公式中仅可使用英文、数字和标准 LaTeX 数学命令。
+        2. 动态更新的文本（如 n 值、样本数）必须使用 Text 对象，并在 updater 中直接修改其 .text 属性。禁止使用 .become() 或 .become(MathTex(...)) 重建对象，否则会导致闪烁和布局错乱。
+        3. 直方图/条形图的更新必须使用 stretch_to_fit_height(about_edge=DOWN) 或 set_height(stretch=True)，且不得每帧重新移动矩形底部位置。
+        4. 所有动画必须预计算数据（如不同 n 的直方图密度），不得在 updater 中实时生成大量随机数或调用 np.histogram，否则将严重超时。
+        5. 动画总时长严格控制在 25 秒以内，渲染预估不超过 60 秒。若需要展示 n 连续变化，必须使用预计算相邻 n 的直方图并通过线性插值过渡。
+        6. 坐标轴标签务必使用 axes.get_x_axis_label(Text("标签")) 或手动创建 Text，切勿传入中文字符串到 LaTeX 环境。
+    """)
+
     user_prompt = f"请根据需求生成Manim动画代码：{user_requirement}"
 
     messages = [
@@ -341,6 +352,13 @@ def fix_manim_code(original_code: str, error_message: str) -> Tuple[bool, str]:
     """)
 
     system_prompt += "\n重要：修复后代码必须能在 30 秒内完成渲染，禁止使用复杂循环或大量点集运算。"
+    system_prompt += textwrap.dedent("""
+        ⚠️【修复强制性约束】：
+        - 优先将中文文本标签从 MathTex/Tex 改为 Text()，避免 LaTeX 编译错误。
+        - 将动态标签的 .become() 调用替换为直接修改 .text 属性。
+        - 将直方图更新逻辑改为 stretch_to_fit_height，移除重复的 move_to 调用。
+        - 若错误为超时，需将耗时的实时计算改为预计算或大幅减少样本量。
+    """)
     user_prompt = f"请修复以下Manim代码：\n```python\n{original_code}\n```"
 
     messages = [
