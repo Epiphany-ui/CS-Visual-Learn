@@ -15,6 +15,16 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class FilterConfig {
 
+    /**
+     * 注册 JWT 认证过滤器
+     * <ul>
+     *   <li>拦截路径：/api/*</li>
+     *   <li>执行顺序：order=1（最先执行）</li>
+     *   <li>白名单：/api/register, /api/login（不校验 token）</li>
+     * </ul>
+     *
+     * @return FilterRegistrationBean
+     */
     @Bean
     public FilterRegistrationBean<AuthFilter> authFilterRegistration() {
         FilterRegistrationBean<AuthFilter> registration = new FilterRegistrationBean<>();

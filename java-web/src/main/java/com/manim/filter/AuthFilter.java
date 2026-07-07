@@ -41,7 +41,13 @@ public class AuthFilter implements Filter {
                          ServletResponse servletResponse,
                          FilterChain filterChain)
             throws IOException, ServletException {
-
+        /*
+         * 过滤流程：
+         * 1. 白名单路径（登录/注册）→ 直接放行
+         * 2. 校验 Authorization: Bearer <token>
+         * 3. JwtUtil 解析 username → 写入 UserContext
+         * 4. finally 清理 UserContext 防止内存泄漏
+         */
         HttpServletRequest request = (HttpServletRequest) servletRequest;
         HttpServletResponse response = (HttpServletResponse) servletResponse;
         String requestPath = request.getRequestURI();
@@ -90,6 +96,12 @@ public class AuthFilter implements Filter {
         response.getWriter().write(json);
     }
 
+    /**
+     * 判断请求路径是否在白名单中
+     *
+     * @param path 请求 URI
+     * @return true 放行，false 需 token 校验
+     */
     private boolean isWhitelisted(String path) {
         for (String pattern : WHITELIST) {
             if (pathMatcher.match(pattern, path)) {

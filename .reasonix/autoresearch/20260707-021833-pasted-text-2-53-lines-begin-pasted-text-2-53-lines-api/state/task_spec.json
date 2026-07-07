@@ -1,0 +1,27 @@
+{
+  "task_id": "20260707-021833-pasted-text-2-53-lines-begin-pasted-text-2-53-lines-api",
+  "goal": "[Pasted text #2 · 53 lines]\n\n--- Begin [Pasted text #2 · 53 lines] ---\n五、后端接口完整设计（全部 /api 前缀，@RestController，Vue Axios 调用）\r1. 用户账号模块接口\r注册接口\r请求方式：POST\r地址：/api/register\r请求参数：username、password\r逻辑：校验账号是否重复，MD5 加密密码存入 user 表\r返回：Result\u003cString\u003e\r登录接口\r请求方式：POST\r地址：/api/login\r请求参数：username、password\r逻辑：查询用户，密码匹配则返回用户信息（实际项目可搭配 Token）\r返回：Result\u003cUser\u003e\r2. 动画任务模块接口\r提交生成任务\rPOST /api/submit\r请求参数：userId、userInput、maxRetry (默认 3)\r逻辑：参数非空校验，插入 task 记录 status=0；@Async 异步调用 Python 服务\r返回：Result\u003cInteger\u003e（返回新建任务 id）\r根据 ID 查询单条任务（Vue 轮询状态）\rGET /api/task/status/{id}\r路径参数：id；请求参数携带 userId 做权限校验\r逻辑：校验任务归属当前登录用户，不存在返回失败\r返回：Result\u003cTask\u003e\r查询当前用户全部历史任务\rGET /api/task/list\r请求参数：userId\r逻辑：按创建时间倒序，只查询该用户的任务\r返回：Result\u003cList\u003cTask\u003e\u003e\r六、Java 调用 Python 接口（不变）\rPython 服务地址：POST http://localhost:8000/generate\r请求 JSON：\rjson\r{\r  \"user_input\": \"动画需求文本\",\r  \"max_retry\": 3\r}\rPython 返回 JSON（无 generated_code、try_count）\rjson\r{\r  \"success\": true,\r  \"video_path\": \"D:/video/1.mp4\",\r  \"log\": \"\"\r}\rJava 异步处理逻辑：\rsuccess=true：更新 status=1，赋值 video_path 本地路径\rsuccess=false：更新 status=2，赋值 error_log 为 log 内容\r捕获网络异常，统一标记任务失败\r七、后端关键配置改造（适配 Vue 前后端分离）\r1. pom.xml 删除 Thymeleaf 依赖，保留核心依赖\r移除：thymeleaf\r保留：Spring Web、MySQL Driver、MyBatis-Plus、Lombok\n--- End [Pasted text #2 · 53 lines] --- 一、核心变更说明\n前端：独立 Vue 项目（单独端口运行，如 8081），使用 Axios 请求后端接口，不再使用 Thymeleaf，无 templates 页面\n后端：移除 Thymeleaf 依赖，全部接口统一返回 JSON Result，不再有页面跳转 Controller；新增跨域 CORS 配置\n数据库、Result 统一返回体、数据库表、Java 调用 Python 逻辑不变，仅调整后端代码与接口规范     你猜我为什么一直让你用result封装，我们是用Vue前后端分离了，我们统一返回JSON结果（Result）给前端",
+  "scope": null,
+  "non_goals": null,
+  "allowed_operations": {
+    "write": true,
+    "network": false,
+    "publish": false
+  },
+  "success_criteria": [
+    {
+      "id": "objective_evidence",
+      "description": "The goal outcome is supported by direct evidence, such as inspected code, reproduced behavior, source material, or concrete findings.",
+      "required": true,
+      "evidence_ids": [
+        "f1"
+      ]
+    },
+    {
+      "id": "verification",
+      "description": "The result has relevant verification evidence, such as tests, commands, benchmarks, manual checks, or a documented reason why verification is not applicable.",
+      "required": true,
+      "evidence_ids": null
+    }
+  ]
+}

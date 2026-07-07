@@ -42,14 +42,17 @@ public class TaskServiceImpl implements TaskService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Integer submitTask(Integer userId, String userInput, Integer maxRetry) {
-        // 创建任务记录，status=0（处理中）
+        /*
+         * 1. 创建任务记录，status=0（处理中）
+         * 2. 异步调用 Python AI 服务渲染视频
+         * 3. 立即返回任务 ID，不阻塞当前请求
+         */
         Task task = new Task();
         task.setUserId(userId);
         task.setUserInput(userInput);
         task.setStatus(0);
         taskMapper.insert(task);
 
-        // 异步调用 Python 服务渲染
         Integer taskId = task.getId();
         asyncRender(taskId, userInput, maxRetry != null ? maxRetry : 3);
 
@@ -71,6 +74,17 @@ public class TaskServiceImpl implements TaskService {
 
     // ==================== 异步调用 Python 服务 ====================
 
+    /**
+     * 异步调用 Python AI 服务生成动画视频
+     * <p>
+     * 该方法在 {@link #submitTask} 中被调用，运行在独立的异步线程池中。
+     * 根据 Python 返回结果更新 task 表中的 video_path 或 error_log。
+     * </p>
+     *
+     * @param taskId    任务主键
+     * @param userInput 用户需求文本
+     * @param maxRetry  Python 重试次数
+     */
     @Async
     public void asyncRender(Integer taskId, String userInput, Integer maxRetry) {
         try {
@@ -105,6 +119,16 @@ public class TaskServiceImpl implements TaskService {
         }
     }
 
+    /**
+     * 根据 Python 返回结果更新任务状态
+     * <ul>
+     *   <li>success = true → status=1 成功，写入 video_path</li>
+     *   <li>success = false → status=2 失败，写入 error_log</li>
+     * </ul>
+     *
+     * @param taskId 任务主键
+     * @param resp   Python 服务响应对象
+     */
     private void updateTaskFromPythonResponse(Integer taskId, PythonResponse resp) {
         Task task = taskMapper.selectById(taskId);
         if (task == null) return;
@@ -120,6 +144,12 @@ public class TaskServiceImpl implements TaskService {
         taskMapper.updateById(task);
     }
 
+    /**
+     * 标记任务为失败状态（网络异常 / 非 200 响应）
+     *
+     * @param taskId   任务主键
+     * @param errorMsg 错误描述
+     */
     private void markTaskFailed(Integer taskId, String errorMsg) {
         Task task = taskMapper.selectById(taskId);
         if (task == null) return;

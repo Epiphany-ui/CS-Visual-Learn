@@ -9,10 +9,20 @@ import org.springframework.context.annotation.Configuration;
 
 /**
  * SpringDoc OpenAPI (Swagger) 配置
+ * <p>
+ * 生成 API 接口文档，启动后访问 {@code /swagger-ui.html} 可查看。
+ * </p>
  */
 @Configuration
 public class SwaggerConfig {
 
+    /**
+     * 自定义 OpenAPI 文档信息
+     * <p>
+     * 包括接口标题、版本号、描述、联系人以及许可证信息，
+     * 展示在 Swagger UI 页面顶部。
+     * </p>
+     */
     @Bean
     public OpenAPI customOpenAPI() {
         return new OpenAPI()

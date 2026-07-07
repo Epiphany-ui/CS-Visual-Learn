@@ -35,7 +35,14 @@ public class ApiController {
     private UserService userService;
 
     /**
-     * 从 UserContext 获取当前用户 ID
+     * 从 UserContext 获取当前登录用户的 ID
+     * <p>
+     * 用户名由 {@link com.manim.filter.AuthFilter} 解析 JWT 后写入
+     * {@link com.manim.utils.UserContext}，此处通过用户名查数据库拿到 userId。
+     * </p>
+     *
+     * @return 当前用户的数据库主键 ID
+     * @throws UnauthorizedException 未登录或用户不存在
      */
     private Integer getCurrentUserId() {
         String username = UserContext.getUsername();
