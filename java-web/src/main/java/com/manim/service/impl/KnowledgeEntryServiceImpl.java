@@ -7,6 +7,7 @@ import com.manim.service.KnowledgeEntryService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.Collections;
 import java.util.List;
 
 @Service
@@ -38,7 +39,7 @@ public class KnowledgeEntryServiceImpl implements KnowledgeEntryService {
     @Override
     public List<KnowledgeEntry> getRecommended(Integer knowledgeId) {
         KnowledgeEntry current = knowledgeEntryMapper.selectById(knowledgeId);
-        if (current == null) return List.of();
+        if (current == null) return Collections.emptyList();
         // 推荐同分类下其他词条
         QueryWrapper<KnowledgeEntry> qw = new QueryWrapper<>();
         qw.eq("category_id", current.getCategoryId())
