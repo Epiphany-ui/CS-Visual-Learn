@@ -20,3 +20,4 @@ Classes
 [`Uncreate`]()|类似[`Create`]()，但相反。
 [`Unwrite`]()|模拟用手擦除 a[`Text`]()或 a [`VMobject`]()。
 [`Write`]()|模拟手写[`Text`]()或手绘[`VMobject`]()。
+[`TypeWithCursor`]() | 逐字显示文本并带有闪烁光标。
