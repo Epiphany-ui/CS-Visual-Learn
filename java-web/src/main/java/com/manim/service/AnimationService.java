@@ -10,4 +10,7 @@ import java.util.List;
 public interface AnimationService {
 
     List<Animation> listByKnowledgeId(Integer knowledgeId);
+
+    /** 统计某词条下的配套动画数量 */
+    int countByKnowledgeId(Integer knowledgeId);
 }

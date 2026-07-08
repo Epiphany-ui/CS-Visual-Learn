@@ -20,4 +20,10 @@ public class AnimationServiceImpl implements AnimationService {
         return animationMapper.selectList(
                 new QueryWrapper<Animation>().eq("knowledge_id", knowledgeId));
     }
+
+    @Override
+    public int countByKnowledgeId(Integer knowledgeId) {
+        return animationMapper.selectCount(
+                new QueryWrapper<Animation>().eq("knowledge_id", knowledgeId)).intValue();
+    }
 }
