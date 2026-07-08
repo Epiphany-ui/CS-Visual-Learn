@@ -13,6 +13,11 @@ public interface UserService {
     User findByUsername(String username);
 
     /**
+     * 根据用户 ID 查询用户
+     */
+    User getById(Integer id);
+
+    /**
      * 用户登录校验
      *
      * @param username 用户名

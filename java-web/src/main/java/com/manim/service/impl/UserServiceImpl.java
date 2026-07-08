@@ -30,6 +30,11 @@ public class UserServiceImpl implements UserService {
         );
     }
 
+    @Override
+    public User getById(Integer id) {
+        return userMapper.selectById(id);
+    }
+
     /**
      * 用户登录校验
      * <p>密码比对采用 MD5 密文比对（存入时已是加密状态）。</p>
