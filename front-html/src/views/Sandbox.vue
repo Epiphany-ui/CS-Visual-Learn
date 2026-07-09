@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { generationApi } from '@/api/generation'
+import { videosApi } from '@/api/videos'
 import { useSSE } from '@/composables/useSSE'
 import { useTaskStore } from '@/stores/task'
 import type { SSETaskEvent, SSEDoneEvent } from '@/types/api'
@@ -21,6 +22,19 @@ const progress = ref(0)
 const progressMsg = ref('')
 const logOutput = ref('')
 const activeTab = ref<'生成' | '渲染' | '修复'>('生成')
+const savedToGallery = ref(false)
+
+async function handleSaveToGallery() {
+  const filename = videoPath.value.replace('/videos/', '')
+  if (!filename) return
+  try {
+    const res = await videosApi.saveVideo(filename)
+    savedToGallery.value = res.data.data?.saved ?? false
+    ElMessage.success(savedToGallery.value ? '已收藏到画廊' : '已取消收藏')
+  } catch {
+    ElMessage.error('收藏失败，请重试')
+  }
+}
 
 // Monaco Editor 占位
 const codeEditorContent = ref('')
@@ -48,6 +62,7 @@ async function startAsyncTask(apiCall: () => Promise<any>) {
   progress.value = 0
   videoPath.value = ''
   logOutput.value = ''
+  savedToGallery.value = false
   try {
     const res = await apiCall()
     const taskId = res.data.data?.task_id
@@ -163,6 +178,15 @@ onUnmounted(() => disconnect())
             <video :src="videoUrl" controls autoplay loop class="preview-video">
               你的浏览器不支持视频播放
             </video>
+            <el-button
+              :type="savedToGallery ? 'warning' : 'default'"
+              size="small" round
+              style="margin-top:8px"
+              @click="handleSaveToGallery"
+            >
+              <el-icon><StarFilled v-if="savedToGallery" /><Star v-else /></el-icon>
+              {{ savedToGallery ? '已收藏' : '收藏到画廊' }}
+            </el-button>
           </div>
           <div v-else class="preview-empty">
             <el-icon :size="48"><VideoCamera /></el-icon>

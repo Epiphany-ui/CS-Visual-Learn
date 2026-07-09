@@ -40,6 +40,7 @@ from services.prompt_service import prompt_service
 from services.progress_service import (
     get_progress, set_progress, subscribe_progress, unsubscribe_progress,
     list_videos, delete_video, list_tasks, delete_task, get_task_count,
+    save_to_gallery, is_in_gallery, get_gallery_filenames,
 )
 from services.config import settings
 from services.exceptions import (
@@ -110,6 +111,21 @@ async def startup_event():
         "[startup] wiki 缓存就绪: %d 个词条, %d 个分类, %d 个索引条目",
         len(_wiki_meta_cache), len(_wiki_categories_cache), len(_wiki_title_index),
     )
+
+    # 自动修复 Windows Redis 常见问题：
+    # 1. RDB 目录无写权限 → 重定向到项目目录
+    # 2. stop-writes-on-bgsave-error=yes → 持久化失败时拒绝写操作
+    try:
+        import redis as _redis_lib
+        r = _redis_lib.Redis.from_url(settings.redis_url, decode_responses=True, socket_connect_timeout=3)
+        # 修复 1: 把 RDB 文件写到项目目录（C:\Program Files\Redis 需要管理员权限）
+        _project_dir = str(Path(__file__).resolve().parent)
+        r.config_set("dir", _project_dir)
+        # 修复 2: 持久化失败时降级为警告，不拒绝写入
+        r.config_set("stop-writes-on-bgsave-error", "no")
+        logger.info("[startup] Redis 配置已自动修复 (dir=%s)", _project_dir)
+    except Exception as _e:
+        logger.warning("[startup] 无法自动配置 Redis: %s（如 Redis 未安装请忽略）", _e)
 
 # ===================== 请求响应模型 =====================
 class GenerateRequest(BaseModel):
@@ -722,10 +738,28 @@ async def api_task_stream(task_id: str):
 
 
 @app.get("/api/videos/list")
-async def api_videos_list():
-    """列出所有已生成的视频文件"""
+async def api_videos_list(gallery: bool = False):
+    """
+    列出所有已生成的视频文件。
+    ?gallery=true 时仅返回已收藏到画廊的视频。
+    """
     videos = list_videos()
+    if gallery:
+        saved = get_gallery_filenames()
+        videos = [v for v in videos if v.get("filename") in saved]
     return success_response({"items": videos, "total": len(videos)})
+
+
+@app.post("/api/videos/{filename}/save")
+async def api_videos_save(filename: str):
+    """
+    Toggle 画廊收藏：已收藏则取消，未收藏则添加。
+    返回 {saved: true/false}。
+    """
+    if ".." in filename or "/" in filename or "\\" in filename:
+        return error_response("非法文件名")
+    saved = save_to_gallery(filename)
+    return success_response({"filename": filename, "saved": saved}, "已收藏" if saved else "已取消收藏")
 
 
 @app.delete("/api/videos/{filename}")
@@ -1058,4 +1092,13 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=8000,
         reload=True,
+        reload_excludes=[
+            "outputs/**",       # 渲染产物：Celery 写入代码/视频会触发重载
+            "logs/**",          # 日志文件
+            "chroma_db/**",     # 向量库：build_kb 会修改
+            "cache/**",         # 缓存目录
+            "__pycache__/**",
+            "*.pyc",
+            "*.log",
+        ],
     )

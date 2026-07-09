@@ -143,6 +143,37 @@ def delete_video(filename: str) -> bool:
     return deleted
 
 
+# ===================== 画廊收藏管理 =====================
+
+GALLERY_KEY = "cs:gallery"  # Redis Set: 已收藏的视频文件名
+
+
+def save_to_gallery(filename: str) -> bool:
+    """
+    Toggle 收藏状态：已收藏则取消，未收藏则添加。
+    返回操作后的状态 (True=已收藏, False=已取消)。
+    """
+    r = _get_redis()
+    if r.sismember(GALLERY_KEY, filename):
+        r.srem(GALLERY_KEY, filename)
+        return False
+    else:
+        r.sadd(GALLERY_KEY, filename)
+        return True
+
+
+def is_in_gallery(filename: str) -> bool:
+    """检查视频是否已收藏"""
+    r = _get_redis()
+    return bool(r.sismember(GALLERY_KEY, filename))
+
+
+def get_gallery_filenames() -> set:
+    """获取所有已收藏的视频文件名"""
+    r = _get_redis()
+    return r.smembers(GALLERY_KEY) or set()
+
+
 # ===================== v1.0 任务队列管理 =====================
 
 def _scan_tasks() -> List[Dict]:
