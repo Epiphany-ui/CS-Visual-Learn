@@ -4,6 +4,7 @@ title CS Visual Learn - Start All Services
 set ROOT=%~dp0
 set CONDA_ENV=E:\Anaconda\envs\manim_ai
 set REDIS_EXE=C:\Program Files\Redis\redis-server.exe
+set REDIS_CLI=C:\Program Files\Redis\redis-cli.exe
 
 echo ============================================
 echo   CS Visual Learn - Starting Services...
@@ -11,10 +12,15 @@ echo ============================================
 echo.
 
 REM --- 1. Redis ---
-echo [1/3] Starting Redis...
-start "Redis" "%REDIS_EXE%"
-timeout /t 2 /nobreak >nul
-echo   Redis started (port 6379)
+echo [1/3] Redis...
+"%REDIS_CLI%" ping >nul 2>&1
+if %errorlevel% equ 0 (
+    echo   Redis is already running (port 6379) - skip
+) else (
+    start "Redis" "%REDIS_EXE%"
+    timeout /t 2 /nobreak >nul
+    echo   Redis started (port 6379)
+)
 echo.
 
 REM --- 2. FastAPI ---
