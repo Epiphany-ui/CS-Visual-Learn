@@ -204,13 +204,16 @@ docker compose up -d
 | GET | `/api/tasks/{task_id}` | 查询 Celery 任务状态与结果 |
 | GET | `/api/tasks/{task_id}/stream` | **SSE 实时流**，前端 EventSource 直连 |
 
-### 视频管理 & 导出（4 个端点）
+### 视频管理 & 画廊（7 个端点）
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/videos/list` | 列出所有视频 |
+| GET | `/api/videos/list` | 列出所有视频（合并标题元数据） |
+| GET | `/api/videos/list?gallery=true` | 仅列出已收藏视频 |
 | GET | `/api/videos/{name}/download` | 直链下载 MP4 |
 | POST | `/api/videos/{name}/convert/gif?fps=10&width=480` | MP4 → GIF 转换 |
+| POST | `/api/videos/{name}/save` | Toggle 画廊收藏 |
+| PATCH | `/api/videos/{name}/title?title=...` | 修改视频标题 |
 | DELETE | `/api/videos/{name}` | 删除视频及源码 |
 
 ### 统一响应格式
