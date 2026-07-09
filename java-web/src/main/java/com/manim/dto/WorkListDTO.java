@@ -27,19 +27,23 @@ public class WorkListDTO {
     @Schema(description = "播放量")
     private Integer viewCount;
 
+    @Schema(description = "视频路径")
+    private String videoPath;
+
     @Schema(description = "发布时间")
     private String createTime;
 
     public WorkListDTO() {}
 
     public WorkListDTO(Integer workId, String cover, String title, String authorName,
-                       Integer likeCount, Integer viewCount, String createTime) {
+                       Integer likeCount, Integer viewCount, String videoPath, String createTime) {
         this.workId = workId;
         this.cover = cover;
         this.title = title;
         this.authorName = authorName;
         this.likeCount = likeCount;
         this.viewCount = viewCount;
+        this.videoPath = videoPath;
         this.createTime = createTime;
     }
 
@@ -60,6 +64,9 @@ public class WorkListDTO {
 
     public Integer getViewCount() { return viewCount; }
     public void setViewCount(Integer viewCount) { this.viewCount = viewCount; }
+
+    public String getVideoPath() { return videoPath; }
+    public void setVideoPath(String videoPath) { this.videoPath = videoPath; }
 
     public String getCreateTime() { return createTime; }
     public void setCreateTime(String createTime) { this.createTime = createTime; }

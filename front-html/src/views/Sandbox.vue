@@ -24,6 +24,8 @@ const progressMsg = ref('')
 const logOutput = ref('')
 const savedToGallery = ref(false)
 const currentFilename = ref('')
+const publishDialogVisible = ref(false)
+const publishDesc = ref('')
 let _activeTaskId = ''
 let _progressTimer: ReturnType<typeof setInterval> | null = null
 let _progressTarget = 0
@@ -160,6 +162,40 @@ async function handleFixCode() {
   finally { fixing.value = false }
 }
 
+function openPublishDialog() {
+  publishDesc.value = requirement.value.slice(0, 200)
+  publishDialogVisible.value = true
+}
+
+async function handlePublish() {
+  const title = code.value.slice(0, 50).match(/class\s+(\w+)/)?.[1] || requirement.value.slice(0, 30) || '未命名作品'
+  const token = localStorage.getItem('token')
+  if (!token) { ElMessage.warning('请先登录再发布'); return }
+  try {
+    const body = new URLSearchParams()
+    body.append('workTitle', title)
+    body.append('workDesc', publishDesc.value)
+    body.append('isPublic', 'true')
+    body.append('code', code.value)
+    body.append('previewUrl', videoUrl.value || '')
+    const res = await fetch('/api/v1/work/publish', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: body.toString(),
+    })
+    const data = await res.json()
+    if (data.code === 200) {
+      publishDialogVisible.value = false
+      ElMessage.success('已发布到社区！')
+    } else {
+      ElMessage.error(data.msg || '发布失败')
+    }
+  } catch (e) { ElMessage.error('发布失败：' + (e as Error).message) }
+}
+
 async function handleSaveToGallery() {
   if (!currentFilename.value) return
   try {
@@ -283,6 +319,9 @@ onUnmounted(() => {
                 <el-icon><StarFilled v-if="savedToGallery" /><Star v-else /></el-icon>
                 {{ savedToGallery ? '已收藏' : '收藏' }}
               </el-button>
+              <el-button size="small" type="success" round @click="openPublishDialog">
+                <el-icon><Upload /></el-icon> 发布到社区
+              </el-button>
             </div>
           </div>
           <div v-else class="preview-empty">
@@ -293,6 +332,15 @@ onUnmounted(() => {
         <div v-if="logOutput" class="panel-log"><pre>{{ logOutput }}</pre></div>
       </div>
     </div>
+
+    <!-- 发布到社区弹窗 -->
+    <el-dialog v-model="publishDialogVisible" title="发布到社区" width="480px">
+      <el-input v-model="publishDesc" type="textarea" :rows="4" placeholder="写一段描述介绍你的作品..." />
+      <template #footer>
+        <el-button @click="publishDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handlePublish">发布</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 

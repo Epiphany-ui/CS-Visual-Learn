@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useAppStore } from '@/stores/app'
 import { ElMessage } from 'element-plus'
+import AvatarIcon from '@/components/common/AvatarIcon.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -11,6 +12,13 @@ const appStore = useAppStore()
 const searchKeyword = ref('')
 const searchFocused = ref(false)
 const themeSpinning = ref(false)
+const avatarUrl = ref('')
+const displayName = ref(userStore.username)
+
+try {
+  avatarUrl.value = localStorage.getItem('cs:avatar') || ''
+  displayName.value = localStorage.getItem('cs:nickname') || userStore.username
+} catch { /* ignore */ }
 
 function handleSearch() {
   if (searchKeyword.value.trim()) {
@@ -87,8 +95,8 @@ function handleLogout() {
         <template v-if="userStore.isLoggedIn">
           <el-dropdown trigger="click">
             <div class="user-avatar">
-              <el-avatar :size="32" :icon="'UserFilled'" />
-              <span class="username">{{ userStore.username }}</span>
+              <AvatarIcon :name="displayName" :size="32" :avatar-url="avatarUrl" />
+              <span class="username">{{ displayName }}</span>
             </div>
             <template #dropdown>
               <el-dropdown-menu>
