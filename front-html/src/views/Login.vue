@@ -108,11 +108,8 @@ async function handleSubmit() {
 }
 
 .login-card {
-  position: relative;
-  z-index: 2;
-  width: 100%;
-  max-width: 420px;
-  padding: var(--space-2xl);
+  position: relative; z-index: 2; width: 100%; max-width: 420px;
+  padding: var(--space-2xl); animation: scale-in 0.5s var(--ease-bounce) both;
 }
 .login-header {
   text-align: center;

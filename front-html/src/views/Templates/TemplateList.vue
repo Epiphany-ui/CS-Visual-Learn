@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { templatesApi } from '@/api/templates'
 import type { TemplateInfo } from '@/types/template'
 import PageHeader from '@/components/common/PageHeader.vue'
+import RevealOnScroll from '@/components/common/RevealOnScroll.vue'
 
 const router = useRouter()
 const categories = ref<string[]>([])
@@ -32,7 +33,8 @@ onMounted(load)
     <PageHeader title="模板库" description="零代码创作动画，选择模板填写参数即刻生成" icon="Tickets" />
 
     <div class="template-grid" v-loading="loading">
-      <div v-for="t in items" :key="t.id" class="t-card glass-card" @click="goDetail(t.id)">
+      <RevealOnScroll v-for="t in items" :key="t.id" as-child>
+      <div class="t-card glass-card" @click="goDetail(t.id)">
         <div class="t-category">{{ t.category }}</div>
         <h3>{{ t.name }}</h3>
         <p class="t-desc">{{ t.description }}</p>
@@ -44,6 +46,7 @@ onMounted(load)
           <el-tag v-for="tag in (t.tags || []).slice(0, 3)" :key="tag" size="small">{{ tag }}</el-tag>
         </div>
       </div>
+      </RevealOnScroll>
     </div>
   </div>
 </template>

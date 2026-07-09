@@ -2,6 +2,7 @@
 import { useUserStore } from '@/stores/user'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import RevealOnScroll from '@/components/common/RevealOnScroll.vue'
 
 const userStore = useUserStore()
 const router = useRouter()
@@ -15,40 +16,33 @@ function handleLogout() {
 
 <template>
   <div class="profile-page">
-    <div class="profile-header glass-card">
-      <el-avatar :size="72" :icon="'UserFilled'" />
-      <h2>{{ userStore.username }}</h2>
-      <p>ID: {{ userStore.userId }}</p>
-      <el-button type="primary" round @click="router.push('/sandbox')"><el-icon><EditPen /></el-icon> 开始创作</el-button>
-    </div>
+    <RevealOnScroll>
+      <div class="profile-header glass-card" style="animation: scale-in 0.6s var(--ease-bounce) both">
+        <el-avatar :size="72" :icon="'UserFilled'" />
+        <h2>{{ userStore.username }}</h2>
+        <p>ID: {{ userStore.userId }}</p>
+        <el-button type="primary" round @click="router.push('/sandbox')"><el-icon><EditPen /></el-icon> 开始创作</el-button>
+      </div>
+    </RevealOnScroll>
 
     <div class="profile-grid">
-      <div class="pf-card glass-card" @click="router.push('/gallery')">
-        <el-icon :size="32" color="var(--accent-purple)"><PictureFilled /></el-icon>
-        <h4>我的作品</h4>
-        <span class="count">0</span>
-      </div>
-      <div class="pf-card glass-card">
-        <el-icon :size="32" color="var(--accent-orange)"><Star /></el-icon>
-        <h4>我的收藏</h4>
-        <span class="count">0</span>
-      </div>
-      <div class="pf-card glass-card">
-        <el-icon :size="32" color="var(--accent-cyan)"><Connection /></el-icon>
-        <h4>我的 Fork</h4>
-        <span class="count">0</span>
-      </div>
-      <div class="pf-card glass-card">
-        <el-icon :size="32" color="var(--accent-green)"><Clock /></el-icon>
-        <h4>浏览历史</h4>
-        <span class="count">0</span>
-      </div>
+      <RevealOnScroll v-for="(_, i) in 4" :key="i" :delay="i * 100">
+        <div class="pf-card glass-card" :class="{ 'cursor-pointer': i === 0 }" @click="i === 0 ? router.push('/gallery') : undefined">
+          <el-icon :size="32" :color="['var(--accent-purple)','var(--accent-orange)','var(--accent-cyan)','var(--accent-green)'][i]">
+            <component :is="['PictureFilled','Star','Connection','Clock'][i]" />
+          </el-icon>
+          <h4>{{ ['我的作品','我的收藏','我的 Fork','浏览历史'][i] }}</h4>
+          <span class="count">0</span>
+        </div>
+      </RevealOnScroll>
     </div>
 
-    <div class="pf-settings glass-card">
-      <h4>账号设置</h4>
-      <el-button type="danger" plain round @click="handleLogout">退出登录</el-button>
-    </div>
+    <RevealOnScroll :delay="400">
+      <div class="pf-settings glass-card">
+        <h4>账号设置</h4>
+        <el-button type="danger" plain round @click="handleLogout">退出登录</el-button>
+      </div>
+    </RevealOnScroll>
   </div>
 </template>
 

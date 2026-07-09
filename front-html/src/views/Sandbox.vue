@@ -208,9 +208,15 @@ onUnmounted(() => disconnect())
 .sb-title { font-size: 1.3rem; font-weight: 800; display: flex; align-items: center; gap: var(--space-sm); background: var(--gradient-primary); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
 .sb-actions { display: flex; gap: var(--space-sm); }
 
-.progress-bar-wrap { margin-bottom: var(--space-md); display: flex; align-items: center; gap: var(--space-md); background: var(--bg-card); padding: var(--space-sm) var(--space-md); border-radius: var(--radius-md); border: 1px solid var(--border-color); }
-.progress-bar-wrap :deep(.el-progress-bar__outer) { background: var(--bg-secondary); }
+.progress-bar-wrap { margin-bottom: var(--space-md); display: flex; align-items: center; gap: var(--space-md); background: var(--bg-card); padding: var(--space-sm) var(--space-md); border-radius: var(--radius-md); border: 1px solid var(--border-color); animation: scale-in 0.3s var(--ease-bounce) both; }
+.progress-bar-wrap :deep(.el-progress-bar__outer) { background: var(--bg-secondary); overflow: hidden; }
+.progress-bar-wrap :deep(.el-progress-bar__inner) {
+  background: linear-gradient(90deg, var(--accent-purple), var(--accent-blue), var(--accent-cyan));
+  background-size: 200% 100%;
+  animation: gradient-shift 2s linear infinite;
+}
 .progress-msg { color: var(--text-secondary); font-size: 0.85rem; white-space: nowrap; }
+.preview-video { animation: scale-in 0.5s var(--ease-spring) both; }
 
 .sb-panels { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--space-md); height: calc(100vh - 180px); }
 .sb-panel { display: flex; flex-direction: column; border: 1px solid var(--border-color); border-radius: var(--radius-lg); background: var(--bg-card); overflow: hidden; }
