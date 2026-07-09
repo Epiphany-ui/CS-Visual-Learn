@@ -27,3 +27,6 @@ bfg*.jar
 .vscode/
 
 .env
+
+# Redis 持久化文件
+dump.rdb

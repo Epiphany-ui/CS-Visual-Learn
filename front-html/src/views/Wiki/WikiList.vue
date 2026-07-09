@@ -16,9 +16,11 @@ const loading = ref(false)
 const searchKw = ref((route.query.q as string) || '')
 
 async function loadCategories() {
-  const res = await wikiApi.getCategories()
-  categories.value = res.data.data?.categories || []
-}
+  try {
+      const res = await wikiApi.getCategories()
+      categories.value = res.data.data?.categories || []
+    } catch { /* 分类加载失败不阻塞列表 */ }
+  }
 
 async function loadList() {
   loading.value = true

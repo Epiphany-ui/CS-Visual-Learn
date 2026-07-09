@@ -27,11 +27,8 @@ javaClient.interceptors.request.use(config => {
 // 响应拦截器：统一错误提示
 const responseInterceptor = (response: any) => {
   const data = response.data
-  if (data && data.code && data.code !== 0 && data.code !== 200) {
-    // 非关键错误不弹提示
-    if (data.code >= 50000) {
-      ElMessage.error(data.message || '服务器错误')
-    }
+  if (data && data.code != null && data.code !== 0 && data.code !== 200) {
+    ElMessage.error(data.message || data.msg || '服务器错误')
   }
   return response
 }
@@ -42,7 +39,7 @@ const errorInterceptor = (error: any) => {
     if (status === 401) {
       localStorage.removeItem('token')
       localStorage.removeItem('username')
-      window.location.href = '/login'
+      window.location.hash = '#/login'
     } else if (status === 429) {
       ElMessage.warning('请求过于频繁，请稍后重试')
     } else if (status >= 500) {

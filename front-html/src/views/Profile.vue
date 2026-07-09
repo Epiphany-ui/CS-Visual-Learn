@@ -1,17 +1,41 @@
 <script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import RevealOnScroll from '@/components/common/RevealOnScroll.vue'
+import { videosApi } from '@/api/videos'
 
 const userStore = useUserStore()
 const router = useRouter()
+
+const myWorksCount = ref(0)
+const myStarsCount = ref(0)
+
+function getMyWorksCount(): number {
+  try {
+    const works = JSON.parse(localStorage.getItem('cs:my-works') || '[]')
+    return works.length
+  } catch { return 0 }
+}
+
+async function loadStarsCount() {
+  try {
+    const res = await videosApi.getList(true)
+    myStarsCount.value = res.data.data?.total || 0
+  } catch { /* ignore */ }
+}
 
 function handleLogout() {
   userStore.logout()
   ElMessage.success('已退出')
   router.push('/')
 }
+
+onMounted(() => {
+  myWorksCount.value = getMyWorksCount()
+  loadStarsCount()
+})
 </script>
 
 <template>
@@ -26,13 +50,18 @@ function handleLogout() {
     </RevealOnScroll>
 
     <div class="profile-grid">
-      <RevealOnScroll v-for="(_, i) in 4" :key="i" :delay="i * 100">
-        <div class="pf-card glass-card" :class="{ 'cursor-pointer': i === 0 }" @click="i === 0 ? router.push('/gallery') : undefined">
-          <el-icon :size="32" :color="['var(--accent-purple)','var(--accent-orange)','var(--accent-cyan)','var(--accent-green)'][i]">
-            <component :is="['PictureFilled','Star','Connection','Clock'][i]" />
+      <RevealOnScroll v-for="(card, i) in [
+        { icon: 'PictureFilled', color: 'var(--accent-purple)', label: '我的作品', count: myWorksCount, click: () => router.push('/sandbox') },
+        { icon: 'Star', color: 'var(--accent-orange)', label: '我的收藏', count: myStarsCount, click: () => router.push('/gallery') },
+        { icon: 'Collection', color: 'var(--accent-cyan)', label: '知识词条', count: 111, click: () => router.push('/wiki') },
+        { icon: 'Clock', color: 'var(--accent-green)', label: '动画模板', count: 10, click: () => router.push('/templates') },
+      ]" :key="card.label" :delay="i * 100">
+        <div class="pf-card glass-card" @click="card.click()">
+          <el-icon :size="32" :color="card.color">
+            <component :is="card.icon" />
           </el-icon>
-          <h4>{{ ['我的作品','我的收藏','我的 Fork','浏览历史'][i] }}</h4>
-          <span class="count">0</span>
+          <h4>{{ card.label }}</h4>
+          <span class="count">{{ card.count }}</span>
         </div>
       </RevealOnScroll>
     </div>

@@ -24,10 +24,22 @@ let hideTimer: ReturnType<typeof setTimeout> | null = null
 
 function renderMath(html: string): string {
   try {
+    // 1. Display math: $$...$$ (double dollar, most common in wiki files)
+    html = html.replace(/\$\$([\s\S]*?)\$\$/g, (_, f: string) => {
+      try { return katex.renderToString(f.trim(), { displayMode: true, throwOnError: false }) }
+      catch { return `<pre class="math-error">${f}</pre>` }
+    })
+    // 2. Display math: \[...\] (bracket-style, some wiki files use this)
     html = html.replace(/\\\[([\s\S]*?)\\\]/g, (_, f: string) => {
       try { return katex.renderToString(f.trim(), { displayMode: true, throwOnError: false }) }
       catch { return `<pre class="math-error">${f}</pre>` }
     })
+    // 3. Inline math: $...$ (single dollar, non-greedy within a paragraph)
+    html = html.replace(/\$([^$]+?)\$/g, (_, f: string) => {
+      try { return katex.renderToString(f.trim(), { displayMode: false, throwOnError: false }) }
+      catch { return `<code class="math-error">${f}</code>` }
+    })
+    // 4. Inline math: \(...\) (bracket-style, less common)
     html = html.replace(/\\\(([\s\S]*?)\\\)/g, (_, f: string) => {
       try { return katex.renderToString(f.trim(), { displayMode: false, throwOnError: false }) }
       catch { return `<code class="math-error">${f}</code>` }
@@ -90,13 +102,16 @@ async function load() {
     const res = await wikiApi.getDetail(slug)
     detail.value = res.data.data
     contentHtml.value = buildHtml(res.data.data.content)
-    await nextTick()
   } finally { loading.value = false }
 }
 
 // 监听路由变化，加载新词条
 watch(() => route.params.slug, (newSlug) => {
-  if (newSlug) load()
+  if (newSlug) {
+    detail.value = null
+    contentHtml.value = ''
+    load()
+  }
 })
 
 onMounted(() => {

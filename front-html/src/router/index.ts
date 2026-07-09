@@ -85,13 +85,20 @@ const router = createRouter({
   ],
 })
 
-// 路由守卫：需要登录的页面自动跳转
+// 路由守卫
 router.beforeEach((to) => {
+  const userStore = useUserStore()
+
+  // 需要登录的页面 → 跳转登录页，携带目标地址
   if (to.meta.auth) {
-    const userStore = useUserStore()
     if (!userStore.isLoggedIn) {
-      return '/login'
+      return { name: 'login', query: { redirect: to.fullPath } }
     }
+  }
+
+  // 已登录用户访问游客页面（如登录页） → 跳转首页
+  if (to.meta.guest && userStore.isLoggedIn) {
+    return { name: 'home' }
   }
 })
 

@@ -17,13 +17,13 @@ const props = withDefaults(defineProps<{
 const el = ref<HTMLElement | null>(null)
 const visible = ref(false)
 
-useIntersectionObserver(
+const { stop } = useIntersectionObserver(
   el,
   ([{ isIntersecting }]) => {
     if (isIntersecting) {
       setTimeout(() => { visible.value = true }, props.delay)
-      if (props.once && el.value) {
-        // Once revealed, stop observing to free resources
+      if (props.once) {
+        stop()
       }
     } else if (!props.once) {
       visible.value = false

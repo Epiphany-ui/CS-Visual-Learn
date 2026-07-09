@@ -1,7 +1,30 @@
 <script setup lang="ts">
-defineProps<{
+import { computed } from 'vue'
+
+const props = withDefaults(defineProps<{
   particleCount?: number
-}>()
+}>(), {
+  particleCount: 15,
+})
+
+interface ParticleConfig {
+  left: string
+  duration: string
+  delay: string
+  width: string
+  height: string
+}
+
+// Pre-compute particle configs once — Math.random() in templates causes re-render jumps
+const particles = computed<ParticleConfig[]>(() => {
+  return Array.from({ length: props.particleCount }, () => ({
+    left: `${Math.random() * 100}%`,
+    duration: `${8 + Math.random() * 12}s`,
+    delay: `${Math.random() * 10}s`,
+    width: `${1 + Math.random() * 2}px`,
+    height: `${1 + Math.random() * 2}px`,
+  }))
+})
 </script>
 
 <template>
@@ -13,16 +36,16 @@ defineProps<{
     <div class="bg-blob bg-blob--2" />
     <div class="bg-blob bg-blob--3" />
     <!-- Particles -->
-    <div v-if="(particleCount ?? 15) > 0" class="particle-canvas" aria-hidden="true">
+    <div v-if="particleCount > 0" class="particle-canvas" aria-hidden="true">
       <div
-        v-for="i in (particleCount ?? 15)" :key="i"
+        v-for="(p, i) in particles" :key="i"
         class="particle"
         :style="{
-          left: `${Math.random() * 100}%`,
-          animationDuration: `${8 + Math.random() * 12}s`,
-          animationDelay: `${Math.random() * 10}s`,
-          width: `${1 + Math.random() * 2}px`,
-          height: `${1 + Math.random() * 2}px`,
+          left: p.left,
+          animationDuration: p.duration,
+          animationDelay: p.delay,
+          width: p.width,
+          height: p.height,
         }"
       />
     </div>

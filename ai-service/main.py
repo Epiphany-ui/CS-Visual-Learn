@@ -7,6 +7,7 @@ CS Visual Learn - AI 服务入口 v1.0
 import asyncio
 import json
 import os
+import threading
 import time as _time
 from pathlib import Path
 from typing import Optional
@@ -346,6 +347,12 @@ async def api_rag_retrieve(req: RetrieveRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# ===================== 工具函数 =====================
+
+def _is_safe_filename(filename: str) -> bool:
+    """防止路径穿越攻击：文件名不得包含 .. 或路径分隔符"""
+    return ".." not in filename and "/" not in filename and "\\" not in filename
+
 # ===================== 百科词条接口 =====================
 WIKI_DATA_DIR = Path(__file__).resolve().parent / "wiki_data"
 
@@ -357,30 +364,35 @@ _index_loaded: bool = False
 _wiki_meta_cache: list = []        # 所有词条的 meta 列表（已排序）
 _wiki_categories_cache: list = []  # 分类列表
 _cache_loaded: bool = False
+_wiki_cache_lock = threading.Lock()
 
 
 def _build_wiki_cache():
     """一次性扫描 wiki_data 目录，构建全量元数据缓存。
     避免每个 /api/wiki/list 请求打开 111 个文件。
+    线程安全：使用 Lock 防止并发构建。
     """
     global _wiki_meta_cache, _wiki_categories_cache, _cache_loaded
     if _cache_loaded:
         return
-    if not WIKI_DATA_DIR.exists():
+    with _wiki_cache_lock:
+        if _cache_loaded:
+            return
+        if not WIKI_DATA_DIR.exists():
+            _cache_loaded = True
+            return
+
+        categories_set = set()
+        meta_list = []
+        for f in WIKI_DATA_DIR.rglob("*.md"):
+            meta = _parse_wiki_meta(f)
+            meta_list.append(meta)
+            categories_set.add(meta.get("category", "未分类"))
+
+        meta_list.sort(key=lambda x: x.get("title", ""))
+        _wiki_meta_cache = meta_list
+        _wiki_categories_cache = sorted(categories_set)
         _cache_loaded = True
-        return
-
-    categories_set = set()
-    meta_list = []
-    for f in WIKI_DATA_DIR.rglob("*.md"):
-        meta = _parse_wiki_meta(f)
-        meta_list.append(meta)
-        categories_set.add(meta.get("category", "未分类"))
-
-    meta_list.sort(key=lambda x: x.get("title", ""))
-    _wiki_meta_cache = meta_list
-    _wiki_categories_cache = sorted(categories_set)
-    _cache_loaded = True
 
 
 def _load_wiki_index():
@@ -388,23 +400,25 @@ def _load_wiki_index():
     global _wiki_title_index, _index_loaded
     if _index_loaded:
         return
-    # 依赖缓存：确保 meta 缓存已构建
+    # 依赖缓存：确保 meta 缓存已构建（内部有锁）
     _build_wiki_cache()
-    if not WIKI_DATA_DIR.exists():
+    with _wiki_cache_lock:
+        if _index_loaded:
+            return
+        if not WIKI_DATA_DIR.exists():
+            _index_loaded = True
+            return
+        for meta in _wiki_meta_cache:
+            title = meta.get("title", "")
+            slug = meta.get("slug", "")
+            if title and slug:
+                _wiki_title_index[title] = slug
+                tags = meta.get("tags", "")
+                for tag in tags.split(","):
+                    tag = tag.strip()
+                    if tag and tag != title:
+                        _wiki_title_index[tag] = slug
         _index_loaded = True
-        return
-    for meta in _wiki_meta_cache:
-        title = meta.get("title", "")
-        slug = meta.get("slug", "")
-        if title and slug:
-            _wiki_title_index[title] = slug
-            # 也加入拼音/英文别名（从 tags 中提取）
-            tags = meta.get("tags", "")
-            for tag in tags.split(","):
-                tag = tag.strip()
-                if tag and tag != title:
-                    _wiki_title_index[tag] = slug
-    _index_loaded = True
 
 
 def _auto_link_content(content: str, current_slug: str) -> str:
@@ -756,7 +770,7 @@ async def api_videos_save(filename: str):
     Toggle 画廊收藏：已收藏则取消，未收藏则添加。
     返回 {saved: true/false}。
     """
-    if ".." in filename or "/" in filename or "\\" in filename:
+    if not _is_safe_filename(filename):
         return error_response("非法文件名")
     saved = save_to_gallery(filename)
     return success_response({"filename": filename, "saved": saved}, "已收藏" if saved else "已取消收藏")
@@ -767,7 +781,7 @@ async def api_videos_delete(filename: str):
     """删除指定视频及对应代码文件"""
     if not filename.endswith(".mp4"):
         return error_response("仅支持删除 .mp4 文件")
-    if ".." in filename or "/" in filename or "\\" in filename:
+    if not _is_safe_filename(filename):
         return error_response("非法文件名")
     deleted = delete_video(filename)
     if deleted:
@@ -894,7 +908,7 @@ async def api_videos_download(filename: str):
     """直接下载视频文件"""
     if not filename.endswith(".mp4"):
         return error_response("仅支持下载 .mp4 文件")
-    if ".." in filename or "/" in filename or "\\" in filename:
+    if not _is_safe_filename(filename):
         return error_response("非法文件名")
 
     video_path = VIDEO_OUTPUT_SUBDIR / filename
@@ -913,7 +927,7 @@ async def api_videos_convert_gif(filename: str, fps: int = 10, width: int = 480)
     """将视频转换为 GIF（需要 ffmpeg）"""
     if not filename.endswith(".mp4"):
         return error_response("仅支持转换 .mp4 文件")
-    if ".." in filename or "/" in filename or "\\" in filename:
+    if not _is_safe_filename(filename):
         return error_response("非法文件名")
 
     video_path = VIDEO_OUTPUT_SUBDIR / filename
@@ -961,7 +975,7 @@ async def api_debug_video_info(filename: str):
     获取视频元数据——时长、帧率、总帧数、分辨率等。
     这是逐帧调试的入口端点。
     """
-    if ".." in filename or "/" in filename or "\\" in filename:
+    if not _is_safe_filename(filename):
         return error_response("非法文件名")
 
     try:
@@ -986,7 +1000,7 @@ async def api_debug_extract_frames(
     提取视频指定帧范围的图片。
     每次最多 100 帧，返回帧列表及访问 URL。
     """
-    if ".." in filename or "/" in filename or "\\" in filename:
+    if not _is_safe_filename(filename):
         return error_response("非法文件名")
 
     try:
@@ -1008,7 +1022,7 @@ async def api_debug_single_frame(filename: str, frame_index: int):
     获取指定编号的单帧图片（便捷端点）。
     自动定位缓存目录中的 frame_{idx:04d}.jpg 或 .png。
     """
-    if ".." in filename or "/" in filename or "\\" in filename:
+    if not _is_safe_filename(filename):
         return error_response("非法文件名")
 
     video_stem = Path(filename).stem
@@ -1038,7 +1052,7 @@ async def api_debug_frame_at_time(filename: str, time: float = 0.0):
     """
     获取指定时间点的单帧截图。
     """
-    if ".." in filename or "/" in filename or "\\" in filename:
+    if not _is_safe_filename(filename):
         return error_response("非法文件名")
 
     try:
@@ -1069,7 +1083,7 @@ async def api_debug_thumbnail_sheet(
     生成缩略图网格（contact sheet），均匀采样视频帧。
     返回一张拼接后的网格图 URL。
     """
-    if ".." in filename or "/" in filename or "\\" in filename:
+    if not _is_safe_filename(filename):
         return error_response("非法文件名")
 
     try:

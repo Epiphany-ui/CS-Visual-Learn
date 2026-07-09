@@ -9,6 +9,7 @@ export const useAppStore = defineStore('app', () => {
     theme.value = theme.value === 'dark' ? 'light' : 'dark'
     localStorage.setItem('theme', theme.value)
     document.documentElement.setAttribute('data-theme', theme.value)
+    document.documentElement.classList.toggle('dark', theme.value === 'dark')
   }
 
   function toggleSidebar() {
@@ -18,9 +19,7 @@ export const useAppStore = defineStore('app', () => {
   // 初始化主题
   function initTheme() {
     document.documentElement.setAttribute('data-theme', theme.value)
-    if (theme.value === 'dark') {
-      document.documentElement.classList.add('dark')
-    }
+    document.documentElement.classList.toggle('dark', theme.value === 'dark')
   }
 
   return { theme, sidebarCollapsed, toggleTheme, toggleSidebar, initTheme }
