@@ -40,6 +40,7 @@ def set_progress(
     message: str = "",
     video_path: str = "",
     log: str = "",
+    code: str = "",
 ):
     """
     更新任务进度并发布到 Pub/Sub
@@ -49,34 +50,42 @@ def set_progress(
     :param message: 当前状态描述
     :param video_path: 成功时返回的视频路径
     :param log: 日志信息
+    :param code: AI 生成的 Manim 代码
     """
-    r = _get_redis()
-    key = f"{TASK_KEY_PREFIX}:{task_id}"
-    channel = f"{TASK_CHANNEL_PREFIX}:{task_id}:progress"
+    try:
+        r = _get_redis()
+        key = f"{TASK_KEY_PREFIX}:{task_id}"
+        channel = f"{TASK_CHANNEL_PREFIX}:{task_id}:progress"
 
-    data = {
-        "task_id": task_id,
-        "state": state,
-        "progress": progress,
-        "message": message,
-        "video_path": video_path,
-        "log": log[-2000:] if log else "",  # 截断日志，避免 Redis 存储过大
-        "updated_at": datetime.now().isoformat(),
-    }
+        data = {
+            "task_id": task_id,
+            "state": state,
+            "progress": progress,
+            "message": message,
+            "video_path": video_path,
+            "log": log[-2000:] if log else "",
+            "code": code[-10000:] if code else "",
+            "updated_at": datetime.now().isoformat(),
+        }
 
-    # 存储状态
-    r.setex(key, TASK_TTL, json.dumps(data, ensure_ascii=False))
-    # 发布事件
-    r.publish(channel, json.dumps(data, ensure_ascii=False))
+        r.setex(key, TASK_TTL, json.dumps(data, ensure_ascii=False))
+        r.publish(channel, json.dumps(data, ensure_ascii=False))
+    except Exception as e:
+        # Redis 不可用时降级：记录日志但不中断任务
+        import logging
+        logging.getLogger("progress").warning("set_progress 失败: %s", e)
 
 
 def get_progress(task_id: str) -> Dict:
-    """查询任务进度"""
-    r = _get_redis()
-    key = f"{TASK_KEY_PREFIX}:{task_id}"
-    raw = r.get(key)
-    if raw:
-        return json.loads(raw)
+    """查询任务进度（Redis 不可用时返回降级状态）"""
+    try:
+        r = _get_redis()
+        key = f"{TASK_KEY_PREFIX}:{task_id}"
+        raw = r.get(key)
+        if raw:
+            return json.loads(raw)
+    except Exception:
+        pass
     return {"task_id": task_id, "state": "UNKNOWN", "progress": 0, "message": "任务不存在或已过期"}
 
 
@@ -153,25 +162,34 @@ def save_to_gallery(filename: str) -> bool:
     Toggle 收藏状态：已收藏则取消，未收藏则添加。
     返回操作后的状态 (True=已收藏, False=已取消)。
     """
-    r = _get_redis()
-    if r.sismember(GALLERY_KEY, filename):
-        r.srem(GALLERY_KEY, filename)
+    try:
+        r = _get_redis()
+        if r.sismember(GALLERY_KEY, filename):
+            r.srem(GALLERY_KEY, filename)
+            return False
+        else:
+            r.sadd(GALLERY_KEY, filename)
+            return True
+    except Exception:
         return False
-    else:
-        r.sadd(GALLERY_KEY, filename)
-        return True
 
 
 def is_in_gallery(filename: str) -> bool:
     """检查视频是否已收藏"""
-    r = _get_redis()
-    return bool(r.sismember(GALLERY_KEY, filename))
+    try:
+        r = _get_redis()
+        return bool(r.sismember(GALLERY_KEY, filename))
+    except Exception:
+        return False
 
 
 def get_gallery_filenames() -> set:
     """获取所有已收藏的视频文件名"""
-    r = _get_redis()
-    return r.smembers(GALLERY_KEY) or set()
+    try:
+        r = _get_redis()
+        return r.smembers(GALLERY_KEY) or set()
+    except Exception:
+        return set()
 
 
 # ===================== v1.0 任务队列管理 =====================

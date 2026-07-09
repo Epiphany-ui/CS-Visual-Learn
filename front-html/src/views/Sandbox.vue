@@ -7,6 +7,7 @@ import { useSSE } from '@/composables/useSSE'
 import { useTaskStore } from '@/stores/task'
 import type { SSETaskEvent, SSEDoneEvent } from '@/types/api'
 import { ElMessage } from 'element-plus'
+import CodeEditor from '@/components/common/CodeEditor.vue'
 
 const route = useRoute()
 const taskStore = useTaskStore()
@@ -36,9 +37,6 @@ async function handleSaveToGallery() {
   }
 }
 
-// Monaco Editor 占位
-const codeEditorContent = ref('')
-
 function handleGenerate() {
   if (!requirement.value.trim()) return
   activeTab.value = '生成'
@@ -49,12 +47,6 @@ function handleRender() {
   if (!code.value.trim()) { ElMessage.warning('请先输入或生成 Manim 代码'); return }
   activeTab.value = '渲染'
   startAsyncTask(() => generationApi.asyncRender(code.value))
-}
-
-function handleGenerateCode() {
-  if (!requirement.value.trim()) return
-  activeTab.value = '生成'
-  startAsyncTask(() => generationApi.asyncGenerate(requirement.value.trim()))
 }
 
 async function startAsyncTask(apiCall: () => Promise<any>) {
@@ -77,9 +69,21 @@ async function startAsyncTask(apiCall: () => Promise<any>) {
         const evt = data as SSETaskEvent
         progress.value = evt.progress
         progressMsg.value = evt.message
+        if (evt.code) {
+          code.value = evt.code
+        }
         if (evt.video_path) {
           videoPath.value = evt.video_path
           videoUrl.value = `http://localhost:8000${evt.video_path}`
+          // Track in localStorage for "My Works"
+          const filename = evt.video_path.replace('/videos/', '')
+          if (filename) {
+            const works = JSON.parse(localStorage.getItem('cs:my-works') || '[]')
+            if (!works.includes(filename)) {
+              works.unshift(filename)
+              localStorage.setItem('cs:my-works', JSON.stringify(works.slice(0, 50)))
+            }
+          }
         }
         if (evt.log) {
           logOutput.value += evt.log + '\n'
@@ -114,7 +118,7 @@ onUnmounted(() => disconnect())
         <el-icon :size="22"><EditPen /></el-icon> 动画沙箱
       </h1>
       <div class="sb-actions">
-        <el-button :loading="generating" type="primary" round @click="handleGenerateCode">
+        <el-button :loading="generating" type="primary" round @click="handleGenerate">
           <el-icon><MagicStick /></el-icon> AI 生成
         </el-button>
         <el-button :loading="generating" round @click="handleRender" :disabled="!code">
@@ -158,13 +162,8 @@ onUnmounted(() => disconnect())
         <div class="panel-header">
           <el-icon><Document /></el-icon> Manim 代码
         </div>
-        <div class="panel-body">
-          <textarea
-            v-model="code"
-            class="code-editor"
-            placeholder="# AI 生成的 Manim 代码将显示在这里..."
-            spellcheck="false"
-          ></textarea>
+        <div class="panel-body code-panel-body">
+          <CodeEditor v-model="code" :readonly="false" />
         </div>
       </div>
 
@@ -229,7 +228,7 @@ onUnmounted(() => disconnect())
 .qp-tag { cursor: pointer; margin: 3px; background: var(--bg-card-hover) !important; border-color: var(--border-color) !important; color: var(--text-secondary); transition: all var(--transition-fast); }
 .qp-tag:hover { border-color: var(--accent-purple) !important; color: var(--accent-purple-light); }
 
-.code-editor { width: 100%; height: 100%; background: var(--bg-secondary); color: var(--text-primary); border: none; padding: var(--space-md); font-family: var(--font-mono); font-size: 0.82rem; line-height: 1.5; resize: none; outline: none; tab-size: 4; }
+.code-panel-body { padding: 0; }
 
 .preview-body { display: flex; align-items: center; justify-content: center; flex-direction: column; }
 .preview-video { max-width: 100%; max-height: 100%; border-radius: var(--radius-md); }

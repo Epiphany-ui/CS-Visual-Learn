@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { ElMessage } from 'element-plus'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 const isLogin = ref(true)
 const username = ref('')
@@ -24,12 +25,14 @@ async function handleSubmit() {
 
     if (res.code === 0 || res.code === 200) {
       ElMessage.success(isLogin.value ? '登录成功！' : '注册成功！')
-      router.push('/')
+      const redirect = (route.query.redirect as string) || '/'
+      router.push(redirect)
     } else {
-      ElMessage.error(res.message || '操作失败')
+      ElMessage.error(res.message || res.msg || '操作失败')
     }
-  } catch {
-    // 错误已在拦截器中处理
+  } catch (e: any) {
+    const msg = e?.response?.data?.message || e?.response?.data?.msg || '网络错误，请检查后端服务'
+    ElMessage.error(msg)
   } finally {
     loading.value = false
   }

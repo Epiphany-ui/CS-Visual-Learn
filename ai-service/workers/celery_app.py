@@ -50,18 +50,18 @@ RETRYABLE_EXCEPTIONS = (ConnectionError, TimeoutError, OSError)
 
 def _make_render_callback(task_id: str):
     """创建渲染进度回调，将 Manim 渲染进度同步到 Redis"""
-    def on_progress(state: str, message: str):
-        progress = 0
+    def on_progress(state: str, message: str, percent: int = 0):
         if state == "started":
             progress, msg = 5, "渲染已启动"
         elif state == "rendering":
-            progress, msg = 50, message
+            # message 来自 tqdm stderr 解析，percent 为实际百分比
+            progress, msg = percent if percent > 0 else 50, message or "渲染中..."
         elif state == "success":
             progress, msg = 100, "渲染完成"
         elif state == "failed":
             progress, msg = 0, f"渲染失败: {message}"
         else:
-            msg = message
+            progress, msg = 0, message
         set_progress(task_id, state="RENDERING", progress=progress, message=msg)
     return on_progress
 
@@ -104,7 +104,7 @@ def generate_full_task(self, requirement: str, max_retry: int = 3):
         if result.get("success"):
             set_progress(task_id, state="SUCCESS", progress=100,
                          message="生成完成", video_path=result.get("video_path", ""),
-                         log=result.get("log", ""))
+                         log=result.get("log", ""), code=result.get("code", ""))
         else:
             set_progress(task_id, state="FAILURE", progress=0,
                          message="生成失败", log=result.get("log", ""))

@@ -16,10 +16,13 @@ const props = withDefaults(defineProps<{
 const el = ref<HTMLElement | null>(null)
 const started = ref(false)
 
-useIntersectionObserver(
+const { stop } = useIntersectionObserver(
   el,
   ([{ isIntersecting }]) => {
-    if (isIntersecting) started.value = true
+    if (isIntersecting) {
+      started.value = true
+      stop()
+    }
   },
   { threshold: 0.3 },
 )
