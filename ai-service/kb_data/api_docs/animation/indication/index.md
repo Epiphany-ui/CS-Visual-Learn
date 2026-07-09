@@ -43,3 +43,4 @@ class Indications(Scene):
 [`ShowPassingFlash`]()|每帧仅显示 VMobject 的一小部分。
 [`ShowPassingFlashWithThinningStrokeWidth`]()|
 [`Wiggle`]()|摆动一个 Mobject。
+[`Blink`]()|使 Mobject 快速闪烁以强调。

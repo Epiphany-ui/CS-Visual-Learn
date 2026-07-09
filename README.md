@@ -1,183 +1,151 @@
-# Manim AI 智能动画生成系统
+# CS-Visual-Learn — 让抽象概念，动起来
+
+> 基于 Manim + 大语言模型的交互式知识可视化学习平台，面向计算机科学与数学领域。
+
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 ## 项目简介
-本项目是一款基于**大语言模型 + RAG 检索增强 + Agent 自动调试**的 Manim 动画自动生成平台。用户只需通过自然语言描述动画需求，系统即可自动完成代码生成、错误修复、视频渲染全流程，大幅降低数学/算法类教学动画的制作门槛。
 
-项目采用 Java Web 业务层 + Python AI 能力层的跨语言分层架构，全程支持本地化离线运行，适配 RTX 3060 6GB 及以上硬件，是面向实训场景的完整工程化项目。
+CS-Visual-Learn 将教材中抽象的算法、数据结构、数学定理转化为直观可交互的动画，同时提供零代码/低代码的动画创作能力，打造"学习-理解-创作-分享"的完整闭环。
 
-## ✨ 项目亮点
-- 🤖 **智能生成**：自然语言一键生成 Manim 动画代码，无需手动编码
-- 🔄 **自动调试**：Agent 闭环自动修复代码错误，支持多轮迭代重试
-- 📚 **知识增强**：内置 Manim 专属 RAG 知识库，大幅提升代码准确率
-- 🖥️ **全本地化**：模型、检索、渲染全部离线运行，无网络依赖
-- 🧩 **分层架构**：Java 业务与 Python AI 解耦，便于扩展与维护
-- 📊 **任务管理**：支持历史任务查询、视频预览与源码下载
+- **对学习者**：告别"看书就懂，做题就废"，通过动画直观理解抽象概念
+- **对创作者**：不需要掌握复杂的 Manim 语法，通过自然语言或模板参数快速生成专业级教学动画
+- **对教育者**：一键生成可视化教学素材，降低课件制作成本
 
-## 🏗️ 整体架构
-项目采用经典 B/S 分层架构，业务与能力解耦，协作边界清晰：
+## 技术架构
+
 ```
-┌─────────────────────────────────────────────────┐
-│  用户层：浏览器访问  │  输入需求、预览视频、管理任务  │
-├─────────────────────────────────────────────────┤
-│  业务层：Java Web   │  任务调度、数据存储、页面交互  │
-├─────────────────────────────────────────────────┤
-│  能力层：Python AI  │  RAG检索、代码生成、渲染调试  │
-└─────────────────────────────────────────────────┘
-```
-- Java 后端作为统一入口，负责用户交互与任务管理，通过 HTTP 接口调用 AI 能力
-- Python AI 引擎独立部署，专注于模型推理与动画渲染，职责单一
-- 两端通过标准化 REST 接口通信，开发互不干扰，联调成本低
-
-## 🛠️ 技术栈
-| 模块 | 技术选型 |
-|------|----------|
-| 后端框架 | Spring Boot 2.7.x + MyBatis-Plus |
-| 数据库 | MySQL 8.0 |
-| 前端页面 | Thymeleaf + Bootstrap 5 |
-| 大模型框架 | Ollama + Qwen2.5-Coder-3B（4-bit 量化） |
-| 向量检索 | ChromaDB + nomic-embed-text |
-| 动画渲染 | Manim Community v0.18.0 |
-| AI 接口 | FastAPI + Uvicorn |
-| 环境管理 | Anaconda + Python 3.10 |
-| 版本控制 | Git + Gitee |
-
-## 📁 项目目录结构
-```
-team-manim-project/
-├── ai-service/       # AI 引擎模块（Python）：RAG 检索、代码生成、自动调试、渲染服务
-├── java-web/         # Java 后端模块：业务逻辑、数据库、页面路由、任务调度
-├── front-html/       # 前端静态资源：页面样式、交互脚本
-├── docs/             # 项目文档：需求文档、接口规范、测试报告、实训资料
-└── README.md         # 项目总说明文档
+┌─────────────────────────────────────────────────────────┐
+│                    前端展示层 (front-html/)               │
+│    Vue 3 + TypeScript + Vite + Element Plus             │
+│    Monaco Editor  │  Video.js  │  Pinia  │  Vue Router  │
+└───────────────────────────┬─────────────────────────────┘
+                            │ HTTP + SSE
+┌───────────────────────────▼─────────────────────────────┐
+│                    业务服务层 (java-web/)                 │
+│    Spring Boot 2.7 + MyBatis-Plus + MySQL 8.0           │
+│    Spring Security + JWT  │  Redis  │  MinIO             │
+└───────────────────────────┬─────────────────────────────┘
+                            │ HTTP
+┌───────────────────────────▼─────────────────────────────┐
+│                    核心引擎层 (ai-service/)               │
+│    FastAPI + DeepSeek API + Manim Community             │
+│    ChromaDB + Ollama  │  Celery + Redis  │  Jinja2      │
+│    SSE 实时推送  │  Wiki 自动超链接  │  GIF 转换          │
+└───────────────────────────┬─────────────────────────────┘
+                            │
+┌───────────────────────────▼─────────────────────────────┐
+│                    数据存储层                             │
+│    MySQL 8.0  │  ChromaDB  │  Redis  │  本地文件存储      │
+└─────────────────────────────────────────────────────────┘
 ```
 
-## 🖥️ 环境要求
-### 硬件要求
-- 显存：≥ 6GB（推荐 RTX 3060 及以上）
-- 内存：≥ 16GB
-- 磁盘：≥ 10GB 剩余空间
+## 项目结构
 
-### 软件要求
-- JDK 1.8
-- MySQL 8.0
-- Anaconda 3
-- Ollama 本地大模型服务
-- ffmpeg 视频渲染依赖
-- Git 版本控制工具
-
-## 🚀 快速启动
-### 1. 克隆仓库
-```bash
-git clone https://gitee.com/ASyangyan/team-manim-project.git
-cd team-manim-project
+```
+cs-visual-learn/
+├── PRODUCT.md                  # 产品业务文档
+├── README.md                   # 本文件
+│
+├── ai-service/                 # 核心引擎层 — 23 个 REST API，95% 成品
+│   ├── ai_engine.py            # 🔴 核心引擎（代码生成/渲染/修复/RAG），禁止修改
+│   ├── main.py                 # FastAPI 入口，全部 REST 接口
+│   ├── Dockerfile              # Docker 镜像
+│   ├── docker-compose.yml      # 一键部署：Redis + API + Worker
+│   ├── services/               # 扩展服务（模板/日志/Prompt/进度追踪）
+│   ├── workers/                # Celery 异步任务（3 个 Task + 进度上报）
+│   ├── templates/              # 10 个参数化模板（零代码创作）
+│   ├── prompts/                # Prompt 模板（热重载）
+│   ├── wiki_data/              # 百科词条（80+ 关键词就绪，6 大分类）
+│   ├── kb_data/                # 知识库素材（Manim API 文档 + 示例代码）
+│   ├── scripts/                # 工具脚本（知识库构建/百科生成/功能测试）
+│   ├── outputs/                # 渲染产物（代码 + 视频）
+│   └── logs/                   # 运行日志（自动轮转）
+│
+├── java-web/                   # 业务服务层 (Spring Boot) — 基础骨架
+│   └── src/main/java/com/manim/
+│
+├── front-html/                 # 前端展示层 (Vue 3) — 待初始化
+├── docs/                       # 项目文档
+└── scripts/                    # 全局脚本
 ```
 
-### 2. 启动 AI 引擎服务
-#### （1）创建 Python 虚拟环境
-打开 Anaconda Prompt：
-```bash
-conda create -n manim_ai python=3.10 -y
-conda activate manim_ai
-```
+## 核心功能模块
 
-#### （2）安装依赖
+| 模块 | 说明 | 状态 |
+|------|------|------|
+| 百科知识库 | 结构化词条，五段式内容，Wikipedia 风格自动超链接 + 相关推荐 | ✅ 已完成 |
+| AI 代码生成 | 自然语言 → Manim 代码，RAG 增强，自动修复重试（最多 3 次） | ✅ 已完成 |
+| 模板库 | 10 个官方模板，覆盖算法/数学/图论/ML/数据结构，零代码生成 | ✅ 已完成 |
+| 异步任务队列 | Celery + Redis，3 个异步 Task，SSE 实时进度推送 | ✅ 已完成 |
+| Prompt 管理 | 模板化 Prompt，热重载，文件即改即生效 | ✅ 已完成 |
+| 视频管理 | 列表/下载/GIF 转换/删除 | ✅ 已完成 |
+| Docker 部署 | Dockerfile + docker-compose 一键启动全套 | ✅ 已完成 |
+| 结构化日志 | 控制台 + 文件双输出，RotatingFileHandler 自动轮转 | ✅ 已完成 |
+| 动画沙箱 | AI 对话 + 代码编辑 + 实时预览，三栏式布局 | ⏳ 待前端 |
+| 精选画廊 | 高质量作品展示，排行榜，Fork 机制 | ⏳ 待前端 |
+| 社区交流 | 评论、点赞、Fork 二次创作、创作者主页 | ⏳ 规划中 |
+| 备考学习 | 408/考研数学学习路径，打卡，进度跟踪 | ⏳ 规划中 |
+
+## 版本路线图
+
+| 版本 | 核心内容 | 状态 |
+|------|---------|------|
+| v0.1 MVP | 百科 + AI 生成 + 基础沙箱 + RAG | ✅ 完成 |
+| v0.2 模板画廊 | 10 个官方模板 + 异步任务 + SSE + Wiki 超链接 + Docker | ✅ 引擎完成 |
+| v0.3 社区 | 评论 + Fork + 用户主页 | ⏳ 待开始 |
+| v1.0 正式版 | 学习路径 + 单步调试 + 参数面板 + 导出 | ⏳ 待开始 |
+| v2.0 生态 | 创作者分成 + 开放 API + 多语言 | ⏳ 待开始 |
+
+## 开发原则
+
+1. **核心引擎零修改** — `ai_engine.py` 为稳定核心，新功能仅在外层封装
+2. **三层解耦** — 前端 → Java 业务层 → Python 引擎层，仅通过 HTTP 通信
+3. **异步优先** — 渲染/生成任务走 Celery 队列，SSE 实时推送进度
+4. **渐进式复杂度** — 看动画 → 调参数 → 改模板 → 写代码
+5. **缓存优先** — 相同需求 MD5 缓存，减少重复渲染
+
+## 快速启动
+
+### 核心引擎层 (ai-service)
+
 ```bash
 cd ai-service
 pip install -r requirements.txt
-conda install -c conda-forge ffmpeg -y
+python build_kb.py          # 构建知识库（可选）
+python main.py              # 启动 API → http://localhost:8000/docs
+# 异步 Worker（需 Redis）：
+celery -A workers.celery_app worker --loglevel=info -P solo
 ```
 
-#### （3）拉取本地模型
-确保 Ollama 服务已启动：
+### Docker 部署
+
 ```bash
-ollama pull qwen2.5-coder:3b-instruct-q4_K_M
-ollama pull nomic-embed-text
+cd ai-service
+docker compose up -d        # 一键启动 Redis + API + Worker
 ```
 
-#### （4）构建知识库并启动服务
+### 业务服务层 (java-web)
+
 ```bash
-# 初始化向量知识库（首次运行必执行）
-python build_kb.py
-
-# 启动 AI 接口服务
-python main.py
+cd java-web && mvn spring-boot:run
 ```
-AI 服务默认运行在 `http://localhost:8000`，访问 `/docs` 可查看接口文档。
 
-### 3. 启动 Java 后端服务
-#### （1）导入数据库
-新建 MySQL 数据库 `manim_ai`，执行项目内的 SQL 脚本初始化表结构。
+## 环境要求
 
-#### （2）修改配置
-打开 `java-web/src/main/resources/application.yml`，修改数据库账号密码为本地配置。
+- Python ≥ 3.10，Manim Community v0.19.x，FFmpeg
+- DeepSeek API Key（必需）
+- Redis 7.x（异步任务需要，可选）
+- Ollama（RAG 向量检索需要，可选）
+- Java 11+ / Maven 3.6+ / MySQL 8.0（业务层需要）
+- Docker Desktop（容器部署，可选）
 
-#### （3）启动项目
-用 IDEA 打开 `java-web` 模块，启动 Spring Boot 应用，服务默认运行在 `http://localhost:8080`。
+## 许可证
 
-### 4. 访问系统
-浏览器打开 `http://localhost:8080`，即可进入动画生成系统首页。
+本项目采用 [MIT License](LICENSE) 开源。
 
-## 📦 核心功能
-1.  **自然语言生成动画**：输入文字描述即可自动生成 Manim 动画视频
-2.  **自动调试修复**：代码渲染失败时自动捕获报错，智能修复并重试
-3.  **RAG 知识增强**：内置 Manim API、示例代码、报错方案知识库，提升生成准确率
-4.  **任务历史管理**：所有生成任务永久保存，支持查看、回放、下载
-5.  **代码在线预览**：生成的 Manim 源码可直接查看与导出
-6.  **视频在线播放**：渲染完成的视频支持页面直接预览与下载
+## 致谢
 
-## 👥 团队分工
-| 角色 | 负责模块 | 核心工作 |
-|------|----------|----------|
-| Java 后端开发 | java-web | Spring Boot 后端开发、数据库设计、接口封装、任务调度 |
-| AI 引擎开发 | ai-service | 大模型部署、RAG 知识库、代码生成、自动调试 Agent、渲染调度 |
-| 前端与测试 | front-html + 测试 | 页面开发、交互优化、全流程测试、测试报告输出 |
-| 文档与知识库 | docs + kb_data | 知识库构建、演示案例打磨、实训报告、答辩 PPT 制作 |
-
-## 💡 核心技术亮点
-### 1. RAG 检索增强生成
-针对小模型 Manim 专业知识不足的问题，构建专属向量知识库，通过语义检索召回相关示例与 API 说明，将一次代码生成成功率提升 20% 以上。
-
-### 2. Agent 自动调试闭环
-实现「生成-执行-反馈-修复」的智能迭代机制，自动捕获渲染报错并驱动大模型修复代码，最多支持 3 轮重试，大幅提升任务成功率。
-
-### 3. 全本地化离线部署
-从大模型推理到视频渲染全流程本地完成，无需依赖外部 API，无数据泄露风险，在无网络环境下也可正常运行。
-
-### 4. 跨语言分层架构
-采用 Java 做业务、Python 做 AI 的经典组合，既贴合高校实训技术栈，又充分发挥各语言生态优势，模块解耦、易于扩展。
-
-### 5. 防御式工程设计
-设置渲染超时、异常捕获、重试上限等多重防护机制，避免单任务异常导致整体服务崩溃，保障系统稳定性。
-
-## ❓ 常见问题 FAQ
-**Q1：Ollama 模型拉取超时怎么办？**
-A：配置 Ollama 国内镜像源，或切换手机热点重试；也可先用在线 API 过渡。
-
-**Q2：启动时报显存不足？**
-A：关闭浏览器、视频软件等占用显存的后台程序；或更换更低量化等级的模型。
-
-**Q3：Java 调用 AI 接口连接失败？**
-A：确认 AI 服务已启动，端口 8000 未被占用，关闭本地防火墙重试。
-
-**Q4：Manim 渲染中文乱码？**
-A：Manim 默认字体不支持中文，建议动画文本使用英文，或手动配置中文字体。
-
-**Q5：代码生成准确率低？**
-A：补充更多高质量示例代码到知识库，重新构建向量库；优化 Prompt 约束规则。
-
-## 📌 版本说明
-- Java 版本：JDK 1.8
-- Spring Boot 版本：2.7.x
-- Python 版本：3.10.x
-- Manim 版本：v0.18.0（固定版本，避免 API 兼容问题）
-- 核心模型：qwen2.5-coder:3b-instruct-q4_K_M
-
-## 📄 许可证
-本项目仅用于教学实训与学习交流，遵循 MIT 开源协议。
-
-## 🙏 致谢
-感谢所有开源社区贡献者，本项目基于以下开源项目构建：
-- Manim Community
-- Ollama
-- ChromaDB
-- FastAPI
-- Spring Boot
+- [Manim Community](https://www.manim.community/) — 数学动画引擎
+- [DeepSeek](https://www.deepseek.com/) — 大语言模型 API
+- [ChromaDB](https://www.trychroma.com/) — 向量数据库
