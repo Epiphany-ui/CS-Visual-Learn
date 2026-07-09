@@ -53,6 +53,19 @@ async function loadStars() {
   } catch { /* ignore */ }
 }
 
+const sortBy = ref<'time' | 'title' | 'size'>('time')
+
+const sortedVideos = computed(() => {
+  const arr = [...videos.value]
+  if (sortBy.value === 'title') {
+    arr.sort((a, b) => getTitle(a).localeCompare(getTitle(b), 'zh'))
+  } else if (sortBy.value === 'size') {
+    arr.sort((a, b) => b.size_bytes - a.size_bytes)
+  }
+  // 'time' = default API order (newest first)
+  return arr
+})
+
 function getTitle(v: VideoFile & { title?: string }) {
   return (v as any).title || v.filename
 }
@@ -107,10 +120,15 @@ watch(() => route.query.tab, (t) => {
       <el-button :type="activeTab === 'stars' ? 'primary' : 'default'" round @click="switchTab('stars')">
         我的收藏 ({{ starsCount }})
       </el-button>
+      <el-select v-model="sortBy" size="small" style="width:140px" @change="() => {}">
+        <el-option label="最新优先" value="time" />
+        <el-option label="标题 A-Z" value="title" />
+        <el-option label="文件大小" value="size" />
+      </el-select>
     </div>
 
     <div class="gallery-grid" v-loading="loading">
-      <div v-for="v in videos" :key="v.filename" class="g-card glass-card" @click="router.push(`/gallery/${v.filename}`)">
+      <div v-for="v in sortedVideos" :key="v.filename" class="g-card glass-card" @click="router.push(`/gallery/${v.filename}`)">
         <div class="g-thumb">
           <img :src="`http://localhost:8000/videos/${v.filename.replace('.mp4','')}.jpg`"
                loading="lazy"

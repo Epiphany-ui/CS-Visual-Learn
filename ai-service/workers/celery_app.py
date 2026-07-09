@@ -135,7 +135,7 @@ def generate_full_task(self, requirement: str, max_retry: int = 3):
         if result.get("success"):
             fn = vp.replace("/videos/", "") if vp else ""
             if fn:
-                _generate_poster(video_path)
+                _generate_poster(vp)
                 save_video_meta(fn, title=requirement[:80])
             set_progress(task_id, state="SUCCESS", progress=100,
                          message="生成完成", video_path=vp,

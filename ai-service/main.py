@@ -8,11 +8,12 @@ import asyncio
 import json
 import os
 import threading
+import uuid
 import time as _time
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -97,6 +98,11 @@ app.mount("/videos", StaticFiles(directory=str(VIDEO_OUTPUT_SUBDIR)), name="vide
 FRAME_CACHE_DIR = Path(__file__).resolve().parent / "outputs" / "frames"
 FRAME_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/frames", StaticFiles(directory=str(FRAME_CACHE_DIR)), name="frames")
+
+# 头像上传目录
+AVATAR_DIR = Path(__file__).resolve().parent / "outputs" / "avatars"
+AVATAR_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/avatars", StaticFiles(directory=str(AVATAR_DIR)), name="avatars")
 
 # 服务器启动时间
 _START_TIME = _time.time()
@@ -822,6 +828,27 @@ class AsyncGenerateRequest(BaseModel):
 class AsyncRenderRequest(BaseModel):
     """异步渲染请求"""
     code: str
+
+
+@app.post("/api/user/avatar")
+async def api_upload_avatar(file: UploadFile = File(...)):
+    """上传用户头像，返回可访问的 URL"""
+    ALLOWED_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+    if file.content_type not in ALLOWED_TYPES:
+        return error_response("仅支持 JPG/PNG/GIF/WebP 格式")
+    # 限制 2MB
+    contents = await file.read()
+    if len(contents) > 2 * 1024 * 1024:
+        return error_response("头像文件不能超过 2MB")
+    # 用时间戳 + 原始扩展名生成文件名
+    ext = file.filename.split(".")[-1] if "." in (file.filename or "") else "png"
+    safe_ext = ext if ext.lower() in ("jpg", "jpeg", "png", "gif", "webp") else "png"
+    avatar_name = f"avatar_{int(_time.time())}_{uuid.uuid4().hex[:6]}.{safe_ext}"
+    avatar_path = AVATAR_DIR / avatar_name
+    with open(avatar_path, "wb") as f:
+        f.write(contents)
+    url = f"/avatars/{avatar_name}"
+    return success_response({"url": url}, "头像上传成功")
 
 
 class AsyncTemplateRequest(BaseModel):
