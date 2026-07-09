@@ -8,12 +8,13 @@
 import json
 import time
 from datetime import datetime
-from typing import Optional, Dict, Generator
+from typing import Optional, Dict, List
 
 import redis
 
 # Redis 连接（复用 Celery 的 Redis，默认本地）
-REDIS_URL = "redis://localhost:6379/0"
+from .config import settings
+REDIS_URL = settings.redis_url
 _redis_client: Optional[redis.Redis] = None
 
 # 常量
@@ -140,3 +141,83 @@ def delete_video(filename: str) -> bool:
         code_path.unlink()
         deleted = True
     return deleted
+
+
+# ===================== v1.0 任务队列管理 =====================
+
+def _scan_tasks() -> List[Dict]:
+    """
+    内部辅助函数：扫描所有 Redis cs:task:* 键，返回任务列表。
+    避免 list_tasks / get_task_count 中重复的扫描逻辑。
+    """
+    r = _get_redis()
+    tasks: List[Dict] = []
+    cursor = 0
+    while True:
+        cursor, keys = r.scan(cursor, match=f"{TASK_KEY_PREFIX}:*", count=100)
+        for key in keys:
+            if ":progress" in key or ":channel" in key:
+                continue
+            raw = r.get(key)
+            if raw:
+                try:
+                    tasks.append(json.loads(raw))
+                except json.JSONDecodeError:
+                    pass
+        if cursor == 0:
+            break
+    return tasks
+
+
+def list_tasks(
+    state_filter: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> Dict:
+    """
+    列出所有活跃/最近的任务（扫描 Redis cs:task:* 键），支持分页和状态筛选。
+    """
+    tasks = _scan_tasks()
+
+    if state_filter:
+        tasks = [t for t in tasks if t.get("state") == state_filter]
+
+    tasks.sort(key=lambda t: t.get("updated_at", ""), reverse=True)
+
+    total = len(tasks)
+    start = (page - 1) * page_size
+    end = start + page_size
+
+    return {
+        "items": tasks[start:end],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": max(1, (total + page_size - 1) // page_size),
+    }
+
+
+def delete_task(task_id: str) -> bool:
+    """删除任务状态记录及相关 Redis / Celery 数据"""
+    r = _get_redis()
+    key = f"{TASK_KEY_PREFIX}:{task_id}"
+    existed = r.exists(key)
+    r.delete(key)
+
+    try:
+        from workers.celery_app import celery_app
+        celery_app.control.revoke(task_id, terminate=True)
+    except Exception:
+        pass
+
+    return bool(existed)
+
+
+def get_task_count() -> Dict:
+    """按状态统计任务数量"""
+    tasks = _scan_tasks()
+    counts: Dict = {"total": len(tasks), "by_state": {}}
+    for task in tasks:
+        state = task.get("state", "UNKNOWN")
+        counts["by_state"][state] = counts["by_state"].get(state, 0) + 1
+    return counts

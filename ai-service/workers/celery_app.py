@@ -18,23 +18,34 @@ if str(_AI_SERVICE_DIR) not in sys.path:
 
 from celery import Celery
 from ai_engine import render_manim_animation, run_full_pipeline
+from services.config import settings
 from services.template_service import template_service
 from services.progress_service import set_progress
+from services.logging_config import get_logger
 
-# Celery配置
+logger = get_logger("celery")
+
+# Celery 配置 — Redis 地址从统一配置读取
 celery_app = Celery(
     'cs_visual_tasks',
-    broker='redis://localhost:6379/0',
-    backend='redis://localhost:6379/0',
+    broker=settings.redis_url,
+    backend=settings.redis_url,
     task_serializer='json',
     result_serializer='json',
     accept_content=['json'],
     timezone='Asia/Shanghai',
     enable_utc=False,
     task_track_started=True,
-    task_time_limit=300,  # 单任务超时5分钟
+    task_time_limit=300,
     task_soft_time_limit=240,
+    worker_prefetch_multiplier=1,
+    task_acks_late=True,
+    task_reject_on_worker_lost=True,
+    result_expires=3600,
 )
+
+# 可重试的异常类型（网络/Redis 瞬时错误，非代码逻辑错误）
+RETRYABLE_EXCEPTIONS = (ConnectionError, TimeoutError, OSError)
 
 
 def _make_render_callback(task_id: str):
@@ -73,9 +84,12 @@ def render_code_task(self, code: str):
                          message="渲染失败", log=log)
 
         return {"success": success, "code": code, "log": log, "video_path": video_path}
+    except RETRYABLE_EXCEPTIONS as e:
+        set_progress(task_id, state="FAILURE", progress=0, message=f"瞬时错误: {e}")
+        self.retry(exc=e, countdown=5)
     except Exception as e:
         set_progress(task_id, state="FAILURE", progress=0, message=str(e))
-        self.retry(exc=e, countdown=5)
+        logger.exception("render_code_task 不可重试错误: %s", e)
 
 
 @celery_app.task(bind=True, max_retries=2)
@@ -96,9 +110,12 @@ def generate_full_task(self, requirement: str, max_retry: int = 3):
                          message="生成失败", log=result.get("log", ""))
 
         return result
+    except RETRYABLE_EXCEPTIONS as e:
+        set_progress(task_id, state="FAILURE", progress=0, message=f"瞬时错误: {e}")
+        self.retry(exc=e, countdown=5)
     except Exception as e:
         set_progress(task_id, state="FAILURE", progress=0, message=str(e))
-        self.retry(exc=e, countdown=5)
+        logger.exception("render_code_task 不可重试错误: %s", e)
 
 
 @celery_app.task(bind=True, max_retries=2)
@@ -129,6 +146,9 @@ def render_template_task(self, template_id: str, params: dict):
                          message="渲染失败", log=log)
 
         return {"success": success, "code": code, "log": log, "video_path": video_path}
+    except RETRYABLE_EXCEPTIONS as e:
+        set_progress(task_id, state="FAILURE", progress=0, message=f"瞬时错误: {e}")
+        self.retry(exc=e, countdown=5)
     except Exception as e:
         set_progress(task_id, state="FAILURE", progress=0, message=str(e))
-        self.retry(exc=e, countdown=5)
+        logger.exception("render_code_task 不可重试错误: %s", e)
