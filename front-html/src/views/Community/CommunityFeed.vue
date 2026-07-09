@@ -5,7 +5,7 @@ import PageHeader from '@/components/common/PageHeader.vue'
 <template>
   <div class="community-page">
     <PageHeader title="社区交流" description="创作者与学习者的交流平台" icon="User" />
-    <div class="placeholder glass-card">
+    <div class="placeholder glass-card" style="animation: scale-in 0.5s var(--ease-bounce) both">
       <el-icon :size="64" color="var(--text-tertiary)"><ChatDotRound /></el-icon>
       <h3>社区功能即将上线</h3>
       <p>作品动态流、评论系统、Fork 机制正在开发中...</p>

@@ -4,6 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { wikiApi } from '@/api/wiki'
 import type { WikiMeta } from '@/types/wiki'
 import PageHeader from '@/components/common/PageHeader.vue'
+import RevealOnScroll from '@/components/common/RevealOnScroll.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -80,8 +81,8 @@ onMounted(() => { loadCategories(); loadList() })
 
     <!-- 词条列表 -->
     <div v-loading="loading" class="wiki-grid">
+      <RevealOnScroll v-for="item in items" :key="item.slug" as-child>
       <div
-        v-for="item in items" :key="item.slug"
         class="wiki-card glass-card"
         @click="router.push(`/wiki/${item.slug}`)"
       >
@@ -96,6 +97,7 @@ onMounted(() => { loadCategories(); loadList() })
           <el-tag v-for="tag in item.tags.split(',').slice(0, 3)" :key="tag" size="small" class="w-tag">{{ tag.trim() }}</el-tag>
         </div>
       </div>
+      </RevealOnScroll>
     </div>
 
     <div v-if="!loading && items.length === 0" class="empty-state">

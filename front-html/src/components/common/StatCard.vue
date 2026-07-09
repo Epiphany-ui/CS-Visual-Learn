@@ -10,7 +10,9 @@ defineProps<{
 <template>
   <div class="stat-card" :style="{ '--stat-color': color || 'var(--accent-purple)' }">
     <div class="stat-value">
-      {{ value }}<span v-if="suffix" class="stat-suffix">{{ suffix }}</span>
+      <slot name="value">
+        {{ value }}<span v-if="suffix" class="stat-suffix">{{ suffix }}</span>
+      </slot>
     </div>
     <div class="stat-label">{{ label }}</div>
   </div>

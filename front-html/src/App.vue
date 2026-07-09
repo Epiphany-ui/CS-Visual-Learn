@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
+import AnimatedBackground from '@/components/common/AnimatedBackground.vue'
 </script>
 
 <template>
   <div class="app-layout">
-    <div class="bg-grid"></div>
+    <AnimatedBackground :particle-count="12" />
     <AppHeader />
     <main class="main-content">
-      <router-view v-slot="{ Component }">
-        <transition name="fade" mode="out-in">
-          <component :is="Component" />
+      <router-view v-slot="{ Component, route }">
+        <transition name="page" mode="out-in">
+          <component :is="Component" :key="route.path" />
         </transition>
       </router-view>
     </main>
