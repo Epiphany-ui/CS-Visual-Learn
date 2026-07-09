@@ -21,7 +21,7 @@ services:
       timeout: 5s
       retries: 3
 
-  # FastAPI 服务 — 同步接口
+  # FastAPI 服务 — v1.0 API
   api:
     build: .
     container_name: cs-visual-api
@@ -31,6 +31,7 @@ services:
       - .env
     environment:
       - REDIS_URL=redis://redis:6379/0
+      - API_WORKERS=4
     volumes:
       - ./outputs:/app/outputs
       - ./logs:/app/logs
@@ -41,7 +42,13 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
-    command: python -m uvicorn main:app --host 0.0.0.0 --port 8000
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    command: python -m uvicorn main:app --host 0.0.0.0 --port 8000 --workers ${API_WORKERS:-1}
 
   # Celery Worker — 异步渲染
   worker:

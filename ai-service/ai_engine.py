@@ -1,37 +1,35 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import ast
+import hashlib
+import json
+import logging
 import os
 import re
+import subprocess
 import sys
-import ast
 import time
 import uuid
-import json
-import hashlib
-import logging
-import requests
-import subprocess
-import chromadb
-from typing import List, Dict, Optional, Tuple
 from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+import chromadb
+import requests
 
 from services.logging_config import get_logger
 
 logger = get_logger("ai_engine")
 
-# ===================== 环境安全与路径配置 =====================
-miktex_path = fr"C:\Users\{os.getlogin()}\AppData\Local\Programs\MiKTeX\miktex\bin\x64"
-if os.path.exists(miktex_path) and miktex_path not in os.environ["PATH"]:
-    os.environ["PATH"] = miktex_path + os.pathsep + os.environ["PATH"]
+# ===================== LaTeX 环境配置（跨平台） =====================
+_miktex_env = os.environ.get("MIKTEX_BIN_PATH", "")
+if _miktex_env and os.path.isdir(_miktex_env) and _miktex_env not in os.environ["PATH"]:
+    os.environ["PATH"] = _miktex_env + os.pathsep + os.environ["PATH"]
 
 # ===================== 模型与 API 全局配置 =====================
-import os
 from dotenv import load_dotenv
 
-# 加载 .env 文件中的环境变量（优先级：已存在的系统环境变量 > .env 文件）
 load_dotenv()
 
-# 密钥从环境变量读取，如果未设置则报错退出（避免静默失败）
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 if not DEEPSEEK_API_KEY:
     raise RuntimeError("未设置环境变量 DEEPSEEK_API_KEY，请检查 .env 文件或系统环境变量")
@@ -43,8 +41,8 @@ LLM_TOP_P: float = 0.85
 API_REQUEST_TIMEOUT: int = 180
 
 # --- Ollama 本地服务 ---
-OLLAMA_BASE_URL: str = "http://localhost:11434"
-EMBEDDING_MODEL_NAME: str = "nomic-embed-text"
+OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+EMBEDDING_MODEL_NAME: str = os.getenv("EMBEDDING_MODEL_NAME", "nomic-embed-text")
 
 # ===================== 业务常量配置 =====================
 CHROMA_PERSIST_DIR: str = "chroma_db"
@@ -59,8 +57,8 @@ OUTPUT_DIR = BASE_DIR / "outputs"
 CODE_OUTPUT_SUBDIR = OUTPUT_DIR / "code"
 VIDEO_OUTPUT_SUBDIR = OUTPUT_DIR / "videos"
 CACHE_DIR = BASE_DIR / "cache"
-RENDER_QUALITY_FLAG: str = "-qm"
-RENDER_TIMEOUT: int = 120
+RENDER_QUALITY_FLAG: str = os.getenv("RENDER_QUALITY_FLAG", "-qm")
+RENDER_TIMEOUT: int = int(os.getenv("RENDER_TIMEOUT", "120"))
 
 CODE_BLOCK_PATTERN: str = r"```python\s*(.*?)\s*```|```\s*(.*?)\s*```"
 SCENE_CLASS_PATTERN: str = r"class\s+(\w+)\s*\(\s*Scene\s*\)"
@@ -176,7 +174,10 @@ def deepseek_chat_request(messages: List[Dict]) -> Tuple[bool, str]:
             # ====== 调试：打印完整响应，控制台可直接看到返回内容 ======
             logger.debug("DeepSeek完整响应：%s", json.dumps(resp_json, ensure_ascii=False, indent=2))
 
-            content = resp_json["choices"][0]["message"]["content"]
+            choices = resp_json.get("choices")
+            if not choices:
+                return False, "❌ 模型返回异常：choices 为空"
+            content = choices[0].get("message", {}).get("content", "")
             if not content or not content.strip():
                 return False, "❌ 模型返回空内容，请检查模型名或提示词"
             return True, content
@@ -244,36 +245,68 @@ def generate_manim_code(user_requirement: str) -> Tuple[bool, str]:
 
 
 def check_latex_violation(code_str: str) -> bool:
+    """检测代码中是否使用了 LaTeX（MathTex/Tex），Windows 下可能因缺少 LaTeX 渲染失败"""
     try:
         root = ast.parse(code_str)
         for node in ast.walk(root):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-                if node.func.id in ["MathTex", "Tex"]:
+                if node.func.id in ("MathTex", "Tex"):
                     return True
         return False
-    except:
-        return True
+    except SyntaxError:
+        return True  # 语法有误时保守返回 True，交由后续处理
 
-import ast
-import numpy as np
 
-def preflight_code_check(code: str) -> bool:
-    """快速检查常见易错点，不通过则直接返回错误信息，避免无效渲染"""
+def preflight_code_check(code: str) -> Tuple[bool, str]:
+    """渲染前快速检查常见易错点，不通过则返回错误信息，避免无效渲染"""
+    # 1. 基础语法检查
     try:
         tree = ast.parse(code)
     except SyntaxError as e:
-        return False, f"代码语法错误: {e}"
+        return False, f"代码语法错误（第 {e.lineno or '?'} 行）: {e.msg}"
 
-    # 检查是否有 Dot(point) 且 point 是三维数组
-    # 简单正则匹配可能误判，用 AST 遍历更可靠
+    # 2. 检查是否有 Scene 子类
+    has_scene = False
     for node in ast.walk(tree):
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-            if node.func.id == 'Dot':
-                # 检查参数是否可能是三维坐标（比如 np.array 或直接列表）
-                for arg in node.args:
-                    # 如果参数是列表或数组，可进一步分析维度（复杂，可先简单规则）
-                    pass
-    # 可以添加更多检查，如 MathTex/Tex 是否存在（如果你环境 LaTeX 不稳定）
+        if isinstance(node, ast.ClassDef):
+            for base in node.bases:
+                if (isinstance(base, ast.Name) and base.id == "Scene") or \
+                   (isinstance(base, ast.Attribute) and base.attr == "Scene"):
+                    has_scene = True
+                    break
+    if not has_scene:
+        return False, "代码中未找到继承自 Scene 的类，Manim 无法渲染"
+
+    # 3. 检查 Manim 导入
+    has_manim_import = False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if "manim" in alias.name:
+                    has_manim_import = True
+        elif isinstance(node, ast.ImportFrom):
+            if node.module and "manim" in node.module:
+                has_manim_import = True
+    if not has_manim_import:
+        return False, "代码中未导入 manim 模块"
+
+    # 4. 检查 3D Dot 坐标（常见错误）
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "Dot":
+            for kw in node.keywords:
+                if kw.arg == "point":
+                    if isinstance(kw.value, (ast.List, ast.Tuple)) and len(kw.value.elts) == 3:
+                        return False, (
+                            "Dot() 使用了 3D 坐标，可能导致渲染异常。"
+                            "请使用 2D 坐标，如 Dot(point[:2])"
+                        )
+            for arg in node.args:
+                if isinstance(arg, (ast.List, ast.Tuple)) and len(arg.elts) == 3:
+                    return False, (
+                        "Dot() 使用了 3D 坐标，可能导致渲染异常。"
+                        "请使用 2D 坐标，如 Dot(point[:2])"
+                    )
+
     return True, ""
 
 
@@ -308,7 +341,9 @@ def render_manim_animation(code_str: str, progress_callback=None) -> Tuple[bool,
         if progress_callback:
             progress_callback("started", "Manim 渲染已启动...")
 
-        # 使用 Popen 逐行读取输出，支持进度回调
+        # 使用 Popen + 线程读取 stderr（避免缓冲区满导致死锁）
+        import threading
+
         process = subprocess.Popen(
             render_command,
             stdout=subprocess.PIPE,
@@ -318,8 +353,17 @@ def render_manim_animation(code_str: str, progress_callback=None) -> Tuple[bool,
             errors="replace",
         )
 
-        stdout_lines = []
-        stderr_lines = []
+        stdout_lines: List[str] = []
+        stderr_lines: List[str] = []
+
+        def _read_stderr():
+            """独立线程读取 stderr，防止缓冲区满导致死锁"""
+            for line in iter(process.stderr.readline, ""):
+                if line:
+                    stderr_lines.append(line)
+
+        stderr_thread = threading.Thread(target=_read_stderr, daemon=True)
+        stderr_thread.start()
 
         try:
             # 逐行读取 stdout，非阻塞式获取渲染进度
@@ -327,16 +371,11 @@ def render_manim_animation(code_str: str, progress_callback=None) -> Tuple[bool,
                 if not line:
                     break
                 stdout_lines.append(line)
-                # Manim 每渲染一帧会输出类似 "Rendering xxx" 的行
                 if progress_callback and "Rendering" in line:
                     progress_callback("rendering", line.strip())
 
-            # 读取剩余 stderr
-            stderr_text = process.stderr.read()
-            if stderr_text:
-                stderr_lines.append(stderr_text)
-
             process.wait(timeout=RENDER_TIMEOUT)
+            stderr_thread.join(timeout=5)
 
         except subprocess.TimeoutExpired:
             process.kill()
@@ -436,8 +475,7 @@ def run_full_pipeline(user_requirement: str, max_retry: int = DEFAULT_RETRY_TIME
 
             if render_success:
                 result.update({"success": True, "video_path": video_path, "log": "\n".join(all_logs)})
-                if result["success"]:
-                    save_to_cache(user_requirement, result)
+                save_to_cache(user_requirement, result)
                 return result
 
         all_logs.append(f"❌ 达到最大重试次数 {max_retry}，任务终止。")

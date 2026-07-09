@@ -1,29 +1,27 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-CS Visual Learn - AI 服务入口
+CS Visual Learn - AI 服务入口 v1.0
 直接复用 ai_engine 核心能力，外层封装 FastAPI 接口
 """
+import asyncio
+import json
 import os
-import uuid
+import time as _time
 from pathlib import Path
 from typing import Optional
 
-import asyncio
-import json
-
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from services.logging_config import setup_logging, get_logger
 
-# 初始化日志（在所有导入之后，确保所有模块受益）
+# 初始化日志
 setup_logging()
 logger = get_logger("main")
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
 
 # 导入核心引擎（所有业务逻辑都在 ai_engine.py）
 from ai_engine import (
@@ -39,26 +37,79 @@ from ai_engine import (
 # 导入外层扩展服务（不修改核心引擎）
 from services.template_service import template_service
 from services.prompt_service import prompt_service
-from services.progress_service import get_progress, subscribe_progress, unsubscribe_progress, list_videos, delete_video
+from services.progress_service import (
+    get_progress, set_progress, subscribe_progress, unsubscribe_progress,
+    list_videos, delete_video, list_tasks, delete_task, get_task_count,
+)
+from services.config import settings
+from services.exceptions import (
+    AppException, TaskNotFoundError, RateLimitError, ValidationError,
+)
+from services.middleware import (
+    RequestIDMiddleware, RequestLoggingMiddleware,
+    ApiKeyMiddleware, RateLimitMiddleware,
+)
+from services.code_validator import validate_code
 
 # ===================== FastAPI 应用初始化 =====================
 app = FastAPI(
-    title="CS Visual Wiki AI Service",
+    title=settings.app_name,
     description="基于 DeepSeek + Manim 的可视化动画生成后端服务",
-    version="0.1.0",
+    version=settings.app_version,
 )
 
-# CORS 跨域配置，适配前端开发
+# --- 中间件注册（顺序重要：先添加的后执行） ---
+# 1. 请求追踪（最先注册，最后执行，确保所有响应都有 X-Request-ID）
+app.add_middleware(RequestIDMiddleware)
+# 2. 结构化请求日志
+app.add_middleware(RequestLoggingMiddleware)
+# 3. API Key 认证（安全层）
+app.add_middleware(ApiKeyMiddleware)
+# 4. 速率限制
+app.add_middleware(RateLimitMiddleware)
+# 5. CORS 跨域配置（可配置化）
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origin_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# --- 全局异常处理 ---
+@app.exception_handler(AppException)
+async def app_exception_handler(request: Request, exc: AppException):
+    """统一处理应用异常，返回标准格式"""
+    request_id = getattr(request.state, "request_id", "-")
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"code": exc.code, "message": exc.message, "data": exc.data},
+        headers={"X-Request-ID": request_id},
+    )
+
 # 挂载视频静态目录，前端可直接通过 URL 播放
 app.mount("/videos", StaticFiles(directory=str(VIDEO_OUTPUT_SUBDIR)), name="videos")
+
+# v1.0: 挂载帧缓存目录（逐帧调试功能）
+FRAME_CACHE_DIR = Path(__file__).resolve().parent / "outputs" / "frames"
+FRAME_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/frames", StaticFiles(directory=str(FRAME_CACHE_DIR)), name="frames")
+
+# 服务器启动时间
+_START_TIME = _time.time()
+
+
+# ===================== 启动事件：预热缓存 =====================
+@app.on_event("startup")
+async def startup_event():
+    """服务启动时预加载 wiki 元数据缓存，避免第一个用户请求触发 111 次文件 I/O"""
+    logger.info("[startup] 正在构建 wiki 元数据缓存...")
+    _build_wiki_cache()
+    _load_wiki_index()
+    logger.info(
+        "[startup] wiki 缓存就绪: %d 个词条, %d 个分类, %d 个索引条目",
+        len(_wiki_meta_cache), len(_wiki_categories_cache), len(_wiki_title_index),
+    )
 
 # ===================== 请求响应模型 =====================
 class GenerateRequest(BaseModel):
@@ -104,9 +155,118 @@ def error_response(message: str, code: int = 1) -> dict:
     return {"code": code, "message": message, "data": None}
 
 # ===================== 健康检查 =====================
+
 @app.get("/health")
 async def health_check():
-    return success_response({"status": "running"}, "服务运行正常")
+    """
+    结构化健康检查：逐一验证所有依赖服务的连接状态。
+    返回 healthy / degraded / unhealthy 三种状态。
+    """
+    checks = {}
+    overall = "healthy"
+
+    # 1. Redis 检测
+    try:
+        t0 = _time.time()
+        from services.progress_service import _get_redis
+        r = _get_redis()
+        r.ping()
+        checks["redis"] = {"status": "up", "latency_ms": round((_time.time() - t0) * 1000, 1)}
+    except Exception as e:
+        checks["redis"] = {"status": "down", "error": str(e)[:200]}
+        overall = "degraded"
+
+    # 2. ChromaDB 检测
+    try:
+        from ai_engine import kb_collection
+        if kb_collection is not None:
+            count = kb_collection.count()
+            checks["chromadb"] = {"status": "up", "collection_count": count}
+        else:
+            checks["chromadb"] = {"status": "down", "error": "kb_collection 未初始化"}
+            overall = "degraded"
+    except Exception as e:
+        checks["chromadb"] = {"status": "down", "error": str(e)[:200]}
+        overall = "degraded"
+
+    # 3. DeepSeek API 检测
+    try:
+        import requests as req_lib
+        t0 = _time.time()
+        resp = req_lib.get(
+            "https://api.deepseek.com/v1/models",
+            headers={"Authorization": f"Bearer {os.environ.get('DEEPSEEK_API_KEY', '')}"},
+            timeout=5,
+        )
+        latency = round((_time.time() - t0) * 1000)
+        if resp.status_code == 200:
+            checks["deepseek_api"] = {"status": "up", "latency_ms": latency}
+        else:
+            checks["deepseek_api"] = {"status": "down", "status_code": resp.status_code}
+            overall = "degraded"
+    except Exception as e:
+        checks["deepseek_api"] = {"status": "down", "error": str(e)[:200]}
+        overall = "degraded"
+
+    # 4. Celery Worker 检测
+    try:
+        from workers.celery_app import celery_app
+        t0 = _time.time()
+        result = celery_app.control.ping(timeout=3)
+        worker_count = len([w for w in result if w])
+        checks["celery"] = {
+            "status": "up" if worker_count > 0 else "down",
+            "worker_count": worker_count,
+            "latency_ms": round((_time.time() - t0) * 1000, 1),
+        }
+        if worker_count == 0:
+            overall = "degraded"
+    except Exception as e:
+        checks["celery"] = {"status": "unknown", "error": str(e)[:200]}
+
+    # 5. Ollama 检测
+    try:
+        import requests as req_lib
+        t0 = _time.time()
+        ollama_url = settings.ollama_base_url
+        resp = req_lib.get(f"{ollama_url}/api/tags", timeout=5)
+        if resp.status_code == 200:
+            checks["ollama"] = {"status": "up", "latency_ms": round((_time.time() - t0) * 1000, 1)}
+        else:
+            checks["ollama"] = {"status": "down", "status_code": resp.status_code}
+    except Exception:
+        checks["ollama"] = {"status": "down", "error": "无法连接到 Ollama"}
+        # Ollama 不可用不影响核心功能，不降低整体状态
+
+    # 6. 磁盘使用检测
+    try:
+        import shutil
+        usage = shutil.disk_usage(VIDEO_OUTPUT_SUBDIR)
+        percent = round(usage.used / usage.total * 100, 1)
+        checks["disk"] = {"status": "ok" if percent < 90 else "warning", "used_percent": percent}
+    except Exception:
+        pass
+
+    return JSONResponse(content={
+        "code": 0,
+        "message": "ok",
+        "data": {
+            "status": overall,
+            "version": settings.app_version,
+            "uptime_seconds": round(_time.time() - _START_TIME),
+            "checks": checks,
+        },
+    })
+
+
+# ===================== 兼容层：Java 后端调用 /generate 不带 /api 前缀 =====================
+@app.post("/generate")
+async def legacy_generate_animation(req: GenerateRequest):
+    """
+     [DEPRECATED] 兼容旧 Java 后端（TaskServiceImpl 调用 /generate 而非 /api/generate）
+    请迁移到 POST /api/generate 或 POST /api/async/generate
+    """
+    return await api_generate_animation(req)
 
 # ===================== 核心接口：完整流水线 =====================
 @app.post("/api/generate")
@@ -177,17 +337,47 @@ WIKI_DATA_DIR = Path(__file__).resolve().parent / "wiki_data"
 _wiki_title_index: dict = {}
 _index_loaded: bool = False
 
+# v1.0.1: 全量元数据缓存，避免每次请求扫描 111 个文件
+_wiki_meta_cache: list = []        # 所有词条的 meta 列表（已排序）
+_wiki_categories_cache: list = []  # 分类列表
+_cache_loaded: bool = False
+
+
+def _build_wiki_cache():
+    """一次性扫描 wiki_data 目录，构建全量元数据缓存。
+    避免每个 /api/wiki/list 请求打开 111 个文件。
+    """
+    global _wiki_meta_cache, _wiki_categories_cache, _cache_loaded
+    if _cache_loaded:
+        return
+    if not WIKI_DATA_DIR.exists():
+        _cache_loaded = True
+        return
+
+    categories_set = set()
+    meta_list = []
+    for f in WIKI_DATA_DIR.rglob("*.md"):
+        meta = _parse_wiki_meta(f)
+        meta_list.append(meta)
+        categories_set.add(meta.get("category", "未分类"))
+
+    meta_list.sort(key=lambda x: x.get("title", ""))
+    _wiki_meta_cache = meta_list
+    _wiki_categories_cache = sorted(categories_set)
+    _cache_loaded = True
+
 
 def _load_wiki_index():
     """构建全局词条索引：{标题: slug} + {slug: meta}"""
     global _wiki_title_index, _index_loaded
     if _index_loaded:
         return
+    # 依赖缓存：确保 meta 缓存已构建
+    _build_wiki_cache()
     if not WIKI_DATA_DIR.exists():
         _index_loaded = True
         return
-    for f in WIKI_DATA_DIR.rglob("*.md"):
-        meta = _parse_wiki_meta(f)
+    for meta in _wiki_meta_cache:
         title = meta.get("title", "")
         slug = meta.get("slug", "")
         if title and slug:
@@ -219,18 +409,18 @@ def _auto_link_content(content: str, current_slug: str) -> str:
 
 
 def _get_related_articles(current_slug: str, current_tags: str, limit: int = 5) -> list:
-    """基于标签重叠获取相关词条推荐"""
+    """基于标签重叠获取相关词条推荐（从内存缓存读取）"""
     _load_wiki_index()
+    _build_wiki_cache()
     if not current_tags:
         return []
 
     current_tag_set = set(t.strip().lower() for t in current_tags.split(",") if t.strip())
     scored = []
 
-    for f in WIKI_DATA_DIR.rglob("*.md"):
-        if f.stem == current_slug:
+    for meta in _wiki_meta_cache:
+        if meta.get("slug") == current_slug:
             continue
-        meta = _parse_wiki_meta(f)
         other_tags = set(t.strip().lower() for t in meta.get("tags", "").split(",") if t.strip())
         overlap = len(current_tag_set & other_tags)
         if overlap > 0:
@@ -279,44 +469,36 @@ def _parse_wiki_meta(file_path: Path) -> dict:
 
 @app.get("/api/wiki/categories")
 async def api_wiki_categories():
-    """获取所有词条分类"""
-    if not WIKI_DATA_DIR.exists():
-        return success_response({"categories": []})
-    categories = [d.name for d in WIKI_DATA_DIR.iterdir() if d.is_dir()]
-    return success_response({"categories": sorted(categories)})
+    """获取所有词条分类（从内存缓存读取，不触碰磁盘）"""
+    _build_wiki_cache()
+    return success_response({"categories": _wiki_categories_cache})
 
 
 @app.get("/api/wiki/list")
 async def api_wiki_list(category: Optional[str] = None):
-    """获取词条列表，可按分类筛选"""
-    if not WIKI_DATA_DIR.exists():
-        return success_response({"items": [], "total": 0})
+    """获取词条列表，可按分类筛选（从内存缓存读取）"""
+    _build_wiki_cache()
 
-    md_files = list(WIKI_DATA_DIR.rglob("*.md"))
-    items = []
-    for f in md_files:
-        meta = _parse_wiki_meta(f)
-        if category and meta["category"] != category:
-            continue
-        items.append(meta)
+    if category:
+        items = [m for m in _wiki_meta_cache if m.get("category") == category]
+    else:
+        items = list(_wiki_meta_cache)
 
-    items.sort(key=lambda x: x["title"])
     return success_response({"items": items, "total": len(items)})
 
 
 @app.get("/api/wiki/search")
 async def api_wiki_search(q: str, limit: int = 10):
-    """关键词搜索词条（标题匹配）"""
-    if not WIKI_DATA_DIR.exists() or not q:
+    """关键词搜索词条（标题匹配，从内存缓存读取）"""
+    _build_wiki_cache()
+    if not q:
         return success_response({"items": [], "total": 0})
 
     q_lower = q.lower()
-    md_files = list(WIKI_DATA_DIR.rglob("*.md"))
     items = []
-    for f in md_files:
-        meta = _parse_wiki_meta(f)
+    for meta in _wiki_meta_cache:
         # 标题或标签包含关键词就匹配
-        if q_lower in meta["title"].lower() or q_lower in meta.get("tags", "").lower():
+        if q_lower in meta.get("title", "").lower() or q_lower in meta.get("tags", "").lower():
             items.append(meta)
         if len(items) >= limit:
             break
@@ -361,12 +543,19 @@ async def api_wiki_detail(slug: str):
 
 @app.post("/api/wiki/reload-index")
 async def api_wiki_reload_index():
-    """重建词条索引（新增词条后调用，无需重启服务）"""
-    global _index_loaded
+    """重建词条索引 + 元数据缓存（新增词条后调用，无需重启服务）"""
+    global _index_loaded, _cache_loaded
     _wiki_title_index.clear()
+    _wiki_meta_cache.clear()
+    _wiki_categories_cache.clear()
     _index_loaded = False
+    _cache_loaded = False
+    _build_wiki_cache()
     _load_wiki_index()
-    return success_response({"index_size": len(_wiki_title_index)}, "索引已重建")
+    return success_response({
+        "index_size": len(_wiki_title_index),
+        "cached_items": len(_wiki_meta_cache),
+    }, "索引与缓存已重建")
 
 
 # ===================== 模板相关接口（零代码创作） =====================
@@ -552,7 +741,119 @@ async def api_videos_delete(filename: str):
     return error_response(f"文件 {filename} 不存在")
 
 
-# ===================== 导出与下载 =====================
+# ===================== v1.0 异步任务端点（Celery 驱动） =====================
+
+class AsyncGenerateRequest(BaseModel):
+    """异步生成请求"""
+    requirement: str
+    max_retry: int = 3
+    context: Optional[str] = None
+
+
+class AsyncRenderRequest(BaseModel):
+    """异步渲染请求"""
+    code: str
+
+
+class AsyncTemplateRequest(BaseModel):
+    """异步模板渲染请求"""
+    template_id: str
+    params: dict = {}
+
+
+@app.post("/api/async/generate")
+async def api_async_generate(req: AsyncGenerateRequest):
+    """
+     异步全流程生成：提交需求 → 立即返回 task_id → Celery Worker 后台处理。
+    前端通过 GET /api/tasks/{task_id}/stream (SSE) 获取实时进度。
+    """
+    try:
+        from workers.celery_app import generate_full_task
+        task = generate_full_task.delay(req.requirement, req.max_retry)
+        logger.info("[async] generate task dispatched: %s", task.id)
+        return success_response({"task_id": task.id}, "任务已提交")
+    except Exception as e:
+        logger.error("[async] generate dispatch failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/async/render")
+async def api_async_render(req: AsyncRenderRequest):
+    """
+     异步纯渲染：提交代码 → 立即返回 task_id。
+    """
+    # 渲染前进行代码预检
+    is_valid, warnings_list = validate_code(req.code)
+    if not is_valid:
+        errors = [w for w in warnings_list if w["severity"] == "error"]
+        return error_response(f"代码预检失败: {errors[0]['message']}" if errors else "代码校验未通过")
+
+    try:
+        from workers.celery_app import render_code_task
+        task = render_code_task.delay(req.code)
+        logger.info("[async] render task dispatched: %s", task.id)
+        return success_response({
+            "task_id": task.id,
+            "warnings": [w for w in warnings_list if w["severity"] != "error"],
+        }, "渲染任务已提交")
+    except Exception as e:
+        logger.error("[async] render dispatch failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/async/template-render")
+async def api_async_template_render(req: AsyncTemplateRequest):
+    """
+     异步模板渲染：提交模板ID+参数 → 立即返回 task_id。
+    """
+    try:
+        from workers.celery_app import render_template_task
+        task = render_template_task.delay(req.template_id, req.params)
+        logger.info("[async] template task dispatched: %s (template=%s)", task.id, req.template_id)
+        return success_response({"task_id": task.id}, "模板渲染任务已提交")
+    except Exception as e:
+        logger.error("[async] template dispatch failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===================== v1.0 任务队列管理 =====================
+
+@app.get("/api/tasks")
+async def api_tasks_list(
+    state: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 20,
+):
+    """
+    列出所有任务（支持按状态筛选和分页）。
+    任务数据来源于 Redis cs:task:* 键。
+    """
+    try:
+        result = list_tasks(state_filter=state, page=page, page_size=page_size)
+        return success_response(result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/tasks/{task_id}")
+async def api_task_cancel(task_id: str):
+    """
+    取消/删除一个任务。
+    调用 Celery revoke 并清理 Redis 进度数据。
+    """
+    try:
+        existed = delete_task(task_id)
+        if existed:
+            return success_response(None, f"任务 {task_id} 已取消")
+        else:
+            raise TaskNotFoundError(task_id)
+    except AppException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===================== 任务进度查询（已有端点，增强） =====================
 
 @app.get("/api/videos/{filename}/download")
 async def api_videos_download(filename: str):
@@ -616,6 +917,137 @@ async def api_videos_convert_gif(filename: str, fps: int = 10, width: int = 480)
         return error_response("未找到 ffmpeg，请先安装 ffmpeg")
     except subprocess.TimeoutExpired:
         return error_response("GIF 转换超时（60s）")
+
+
+# ===================== v1.0 逐帧调试 API =====================
+
+@app.get("/api/debug/video/{filename}/info")
+async def api_debug_video_info(filename: str):
+    """
+    获取视频元数据——时长、帧率、总帧数、分辨率等。
+    这是逐帧调试的入口端点。
+    """
+    if ".." in filename or "/" in filename or "\\" in filename:
+        return error_response("非法文件名")
+
+    try:
+        from services.debug_service import get_video_info
+        found, info = get_video_info(filename)
+        if not found:
+            return error_response(info.get("error", "视频不存在"))
+        return success_response(info)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/debug/video/{filename}/frames")
+async def api_debug_extract_frames(
+    filename: str,
+    start_frame: int = 0,
+    end_frame: int = 10,
+    format: str = "jpg",
+    quality: int = 85,
+):
+    """
+    提取视频指定帧范围的图片。
+    每次最多 100 帧，返回帧列表及访问 URL。
+    """
+    if ".." in filename or "/" in filename or "\\" in filename:
+        return error_response("非法文件名")
+
+    try:
+        from services.debug_service import extract_frames
+        success, result = extract_frames(
+            filename, start_frame=start_frame, end_frame=end_frame,
+            format=format, quality=quality,
+        )
+        if not success:
+            return error_response(result.get("error", "帧提取失败"))
+        return success_response(result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/debug/video/{filename}/frame/{frame_index}")
+async def api_debug_single_frame(filename: str, frame_index: int):
+    """
+    获取指定编号的单帧图片（便捷端点）。
+    自动定位缓存目录中的 frame_{idx:04d}.jpg 或 .png。
+    """
+    if ".." in filename or "/" in filename or "\\" in filename:
+        return error_response("非法文件名")
+
+    video_stem = Path(filename).stem
+    frame_dir = FRAME_CACHE_DIR / video_stem
+
+    # 按常见格式查找帧文件
+    for ext in ("jpg", "png"):
+        frame_path = frame_dir / f"frame_{frame_index:04d}.{ext}"
+        if frame_path.exists():
+            return FileResponse(
+                path=str(frame_path),
+                media_type=f"image/{'jpeg' if ext == 'jpg' else ext}",
+            )
+        # 也尝试不带前导零的文件名
+        alt_path = frame_dir / f"frame_{frame_index}.{ext}"
+        if alt_path.exists():
+            return FileResponse(
+                path=str(alt_path),
+                media_type=f"image/{'jpeg' if ext == 'jpg' else ext}",
+            )
+
+    return error_response(f"帧 #{frame_index} 不存在，请先调用 /api/debug/video/{filename}/frames 提取")
+
+
+@app.get("/api/debug/video/{filename}/frame-at-time")
+async def api_debug_frame_at_time(filename: str, time: float = 0.0):
+    """
+    获取指定时间点的单帧截图。
+    """
+    if ".." in filename or "/" in filename or "\\" in filename:
+        return error_response("非法文件名")
+
+    try:
+        from services.debug_service import extract_frame_at_time
+        success, result = extract_frame_at_time(filename, time)
+        if not success:
+            return error_response(result.get("error", "截图失败"))
+
+        # 返回图片文件
+        video_stem = Path(filename).stem
+        frame_name = f"time_{time:.3f}s.jpg"
+        frame_path = FRAME_CACHE_DIR / video_stem / frame_name
+        if frame_path.exists():
+            return FileResponse(path=str(frame_path), media_type="image/jpeg")
+        return success_response(result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/debug/video/{filename}/thumbnail-sheet")
+async def api_debug_thumbnail_sheet(
+    filename: str,
+    cols: int = 5,
+    rows: int = 4,
+    width: int = 320,
+):
+    """
+    生成缩略图网格（contact sheet），均匀采样视频帧。
+    返回一张拼接后的网格图 URL。
+    """
+    if ".." in filename or "/" in filename or "\\" in filename:
+        return error_response("非法文件名")
+
+    try:
+        from services.debug_service import generate_thumbnail_sheet
+        success, result = generate_thumbnail_sheet(
+            filename, cols=cols, rows=rows, width=width,
+        )
+        if not success:
+            return error_response(result.get("error", "缩略图生成失败"))
+        return success_response(result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ===================== 启动入口 =====================
