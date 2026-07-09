@@ -24,9 +24,9 @@
         </div>
         <div class="link-group">
           <h4>关于</h4>
-          <a href="#">关于我们</a>
-          <a href="#">帮助文档</a>
-          <a href="#">反馈建议</a>
+          <span class="dead-link">关于我们</span>
+          <span class="dead-link">帮助文档</span>
+          <span class="dead-link">反馈建议</span>
         </div>
       </div>
     </div>
@@ -88,6 +88,10 @@
 }
 .link-group a:hover {
   color: var(--accent-purple-light);
+}
+.dead-link {
+  display: block; color: var(--text-tertiary); font-size: 0.85rem; padding: 4px 0;
+  text-decoration: line-through; cursor: not-allowed; opacity: 0.5;
 }
 .footer-bottom {
   max-width: var(--max-content-width);

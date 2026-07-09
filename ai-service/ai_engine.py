@@ -367,12 +367,20 @@ def render_manim_animation(code_str: str, progress_callback=None) -> Tuple[bool,
 
         try:
             # 逐行读取 stdout，非阻塞式获取渲染进度
+            import re as _re
+            _tqdm_pct = _re.compile(r'(\d+)%')  # 解析 tqdm 进度条: " 40%|####"
             for line in iter(process.stdout.readline, ""):
                 if not line:
                     break
                 stdout_lines.append(line)
-                if progress_callback and "Rendering" in line:
-                    progress_callback("rendering", line.strip())
+                if progress_callback:
+                    # 尝试从 tqdm 输出中提取实际百分比
+                    m = _tqdm_pct.search(line)
+                    if m:
+                        pct = int(m.group(1))
+                        progress_callback("rendering", line.strip(), percent=pct)
+                    elif "Rendering" in line or "Writing" in line or "File ready" in line:
+                        progress_callback("rendering", line.strip())
 
             process.wait(timeout=RENDER_TIMEOUT)
             stderr_thread.join(timeout=5)
