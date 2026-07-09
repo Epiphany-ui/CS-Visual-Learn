@@ -5,9 +5,16 @@ import type { VideoFile, VideoMetadata, FrameInfo } from '@/types/task'
 const VIDEO_BASE = 'http://localhost:8000'
 
 export const videosApi = {
-  /** 获取视频列表 */
-  getList() {
-    return pythonClient.get<ApiResponse<{ items: VideoFile[]; total: number }>>('/api/videos/list')
+  /** 获取视频列表。?gallery=true 时仅返回已收藏到画廊的视频 */
+  getList(gallery = false) {
+    return pythonClient.get<ApiResponse<{ items: VideoFile[]; total: number }>>('/api/videos/list', {
+      params: gallery ? { gallery: true } : {},
+    })
+  },
+
+  /** Toggle 画廊收藏：已收藏则取消，未收藏则添加 */
+  saveVideo(filename: string) {
+    return pythonClient.post<ApiResponse<{ filename: string; saved: boolean }>>(`/api/videos/${filename}/save`)
   },
 
   /** 下载视频 */

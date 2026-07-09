@@ -12,7 +12,7 @@ const loading = ref(false)
 async function load() {
   loading.value = true
   try {
-    const res = await videosApi.getList()
+    const res = await videosApi.getList(true)  // gallery=true: 仅收藏的视频
     videos.value = res.data.data?.items || []
   } finally { loading.value = false }
 }
