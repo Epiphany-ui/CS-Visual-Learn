@@ -47,6 +47,11 @@ from services.progress_service import (
     save_video_meta, get_video_meta, get_all_video_metas, update_video_title,
     add_to_user_works, get_user_works, mark_task_cancelled,
 )
+from services.comment_service import (
+    toggle_like, is_liked, get_like_counts, check_user_likes,
+    increment_view, get_view_counts,
+    add_comment, get_comments, get_comment_count, like_comment,
+)
 from services.config import settings
 from services.exceptions import (
     AppException, TaskNotFoundError, RateLimitError, ValidationError,
@@ -1068,6 +1073,83 @@ async def api_videos_convert_gif(filename: str, fps: int = 10, width: int = 480)
         return error_response("未找到 ffmpeg，请先安装 ffmpeg")
     except subprocess.TimeoutExpired:
         return error_response("GIF 转换超时（60s）")
+
+
+# ===================== v1.0 社区互动 API（评论、点赞、浏览） =====================
+
+@app.post("/api/community/like/{work_id}")
+async def api_toggle_like(work_id: int, username: str = ""):
+    """Toggle 点赞"""
+    if not username:
+        return error_response("用户名不能为空")
+    result = toggle_like(work_id, username)
+    return success_response(result, "已点赞" if result["liked"] else "已取消")
+
+
+@app.get("/api/community/likes")
+async def api_get_likes(ids: str = ""):
+    """批量获取点赞数 ?ids=1,2,3"""
+    try:
+        work_ids = [int(x) for x in ids.split(",") if x.strip()]
+        counts = get_like_counts(work_ids)
+        return success_response({"counts": counts})
+    except Exception:
+        return error_response("参数格式错误")
+
+
+@app.get("/api/community/likes/check")
+async def api_check_likes(ids: str = "", username: str = ""):
+    """查询用户是否已点赞 ?ids=1,2,3&username=xxx"""
+    try:
+        work_ids = [int(x) for x in ids.split(",") if x.strip()]
+        liked = check_user_likes(work_ids, username)
+        return success_response({"liked": liked})
+    except Exception:
+        return error_response("参数格式错误")
+
+
+@app.get("/api/community/views")
+async def api_get_views(ids: str = ""):
+    """批量获取浏览量 & 递增"""
+    try:
+        work_ids = [int(x) for x in ids.split(",") if x.strip()]
+        counts = get_view_counts(work_ids)
+        return success_response({"counts": counts})
+    except Exception:
+        return error_response("参数格式错误")
+
+
+@app.post("/api/community/view/{work_id}")
+async def api_increment_view(work_id: int):
+    """递增浏览量（播放视频时调用）"""
+    count = increment_view(work_id)
+    return success_response({"count": count})
+
+
+@app.get("/api/community/comments/{work_id}")
+async def api_get_comments(work_id: int, limit: int = 3, sort: str = "likes"):
+    """获取评论列表"""
+    comments = get_comments(work_id, limit=limit, sort_by=sort)
+    total = get_comment_count(work_id)
+    return success_response({"comments": comments, "total": total})
+
+
+@app.post("/api/community/comments/{work_id}")
+async def api_add_comment(work_id: int, username: str = "", text: str = "", avatar: str = ""):
+    """发表评论"""
+    if not username or not text:
+        return error_response("用户名和评论内容不能为空")
+    if len(text) > 500:
+        return error_response("评论不能超过500字")
+    comment = add_comment(work_id, username, text, avatar)
+    return success_response({"comment": comment}, "评论发表成功")
+
+
+@app.post("/api/community/comments/{work_id}/like/{comment_id}")
+async def api_like_comment(work_id: int, comment_id: str, username: str = ""):
+    """给评论点赞/取消点赞"""
+    result = like_comment(comment_id, work_id, username)
+    return success_response({"commentId": comment_id, "liked": result["liked"], "likes": result["likes"]})
 
 
 # ===================== v1.0 逐帧调试 API =====================
