@@ -38,7 +38,7 @@ CODER_MODEL_NAME = os.getenv("DEEPSEEK_MODEL_NAME", "deepseek-v4-flash")
 DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
 LLM_TEMPERATURE: float = 0.1
 LLM_TOP_P: float = 0.85
-API_REQUEST_TIMEOUT: int = 180
+API_REQUEST_TIMEOUT: tuple = (10, 120)  # (连接超时10s, 读取超时120s)
 
 # --- Ollama 本地服务 ---
 OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
@@ -95,7 +95,8 @@ def generate_embedding(text: str) -> List[float]:
                 "model": EMBEDDING_MODEL_NAME,
                 "input": text
             },
-            timeout=API_REQUEST_TIMEOUT
+            timeout=API_REQUEST_TIMEOUT,
+            proxies={"http": None, "https": None},  # 不走系统代理
         )
         response.raise_for_status()
         return response.json().get("embeddings", [[]])[0]
@@ -181,13 +182,13 @@ def deepseek_chat_request(messages: List[Dict]) -> Tuple[bool, str]:
             if not content or not content.strip():
                 return False, "❌ 模型返回空内容，请检查模型名或提示词"
             return True, content
-        except requests.exceptions.Timeout:
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError, ConnectionError, TimeoutError) as e:
             if attempt < max_retry - 1:
                 wait_time = 2 ** attempt
-                logger.warning("DeepSeek API超时，第%d次重试，等待%d秒...", attempt + 1, wait_time)
+                logger.warning("DeepSeek API超时/连接失败 (attempt %d/%d)，等待%d秒后重试...", attempt + 1, max_retry, wait_time)
                 time.sleep(wait_time)
                 continue
-            return False, f"❌ DeepSeek API连续{max_retry}次读取超时，请稍后重试"
+            return False, f"❌ DeepSeek API连续{max_retry}次超时/连接失败，请稍后重试"
         except Exception as e:
             return False, f"❌ DeepSeek API调用失败：{str(e)}"
     return False, "❌ DeepSeek API达到最大重试次数"
@@ -357,18 +358,25 @@ def render_manim_animation(code_str: str, progress_callback=None) -> Tuple[bool,
         stderr_lines: List[str] = []
 
         def _read_stderr():
-            """独立线程读取 stderr，防止缓冲区满导致死锁"""
+            """独立线程读取 stderr，防止缓冲区满导致死锁 + 解析 tqdm 进度"""
             for line in iter(process.stderr.readline, ""):
                 if line:
                     stderr_lines.append(line)
+                    if progress_callback:
+                        m = _tqdm_pct.search(line)
+                        if m:
+                            pct = int(m.group(1))
+                            progress_callback("rendering", line.strip(), percent=pct)
 
         stderr_thread = threading.Thread(target=_read_stderr, daemon=True)
+
+        # 编译 tqdm 进度正则（必须在 start() 之前，避免线程中的竞态条件）
+        _tqdm_pct = re.compile(r'(\d+)%')
+
         stderr_thread.start()
 
         try:
             # 逐行读取 stdout，非阻塞式获取渲染进度
-            import re as _re
-            _tqdm_pct = _re.compile(r'(\d+)%')  # 解析 tqdm 进度条: " 40%|####"
             for line in iter(process.stdout.readline, ""):
                 if not line:
                     break
@@ -434,18 +442,24 @@ def fix_manim_code(original_code: str, error_message: str) -> Tuple[bool, str]:
     return True, fixed_code
 
 
-def run_full_pipeline(user_requirement: str, max_retry: int = DEFAULT_RETRY_TIMES) -> Dict:
+def run_full_pipeline(user_requirement: str, max_retry: int = DEFAULT_RETRY_TIMES, progress_callback=None) -> Dict:
     result = {"success": False, "code": "", "video_path": "", "try_count": 0, "log": ""}
     current_code = ""
     all_logs = []
+
+    def _report(state, msg, pct=0):
+        if progress_callback:
+            progress_callback(state, msg, percent=pct)
 
     try:
         # 优先命中缓存
         cached = get_cached_result(user_requirement)
         if cached:
             cached["log"] = "✅ 命中本地缓存，极速返回\n" + cached["log"]
+            _report("rendering", "命中缓存", 100)
             return cached
 
+        _report("rendering", "AI 正在生成 Manim 代码...", 10)
         gen_success, gen_result = generate_manim_code(user_requirement)
         result["try_count"] = 1
         if not gen_success:
@@ -455,7 +469,8 @@ def run_full_pipeline(user_requirement: str, max_retry: int = DEFAULT_RETRY_TIME
 
         current_code = gen_result
         result["code"] = current_code
-        render_success, render_log, video_path = render_manim_animation(current_code)
+        _report("rendering", "代码生成完成，开始渲染动画...", 20)
+        render_success, render_log, video_path = render_manim_animation(current_code, progress_callback=progress_callback)
         all_logs.append(f"第1次渲染：\n{render_log}")
 
         if render_success:
@@ -467,6 +482,7 @@ def run_full_pipeline(user_requirement: str, max_retry: int = DEFAULT_RETRY_TIME
             current_try = retry_index + 1
             result["try_count"] = current_try
 
+            _report("rendering", f"第{current_try}次修复中...", 30 + retry_index * 20)
             fix_success, fix_result = fix_manim_code(current_code, render_log)
             if not fix_success:
                 all_logs.append(f"第{current_try}次修复失败：{fix_result}")
@@ -478,7 +494,8 @@ def run_full_pipeline(user_requirement: str, max_retry: int = DEFAULT_RETRY_TIME
             current_code = fix_result
             result["code"] = current_code
 
-            render_success, render_log, video_path = render_manim_animation(current_code)
+            _report("rendering", f"第{current_try}次渲染中...", 40 + retry_index * 20)
+            render_success, render_log, video_path = render_manim_animation(current_code, progress_callback=progress_callback)
             all_logs.append(f"第{current_try}次渲染：\n{render_log}")
 
             if render_success:

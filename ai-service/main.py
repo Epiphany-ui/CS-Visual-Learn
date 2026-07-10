@@ -8,11 +8,12 @@ import asyncio
 import json
 import os
 import threading
+import uuid
 import time as _time
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -42,6 +43,7 @@ from services.progress_service import (
     get_progress, set_progress, subscribe_progress, unsubscribe_progress,
     list_videos, delete_video, list_tasks, delete_task, get_task_count,
     save_to_gallery, is_in_gallery, get_gallery_filenames,
+    save_video_meta, get_video_meta, get_all_video_metas, update_video_title,
 )
 from services.config import settings
 from services.exceptions import (
@@ -97,6 +99,11 @@ FRAME_CACHE_DIR = Path(__file__).resolve().parent / "outputs" / "frames"
 FRAME_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/frames", StaticFiles(directory=str(FRAME_CACHE_DIR)), name="frames")
 
+# 头像上传目录
+AVATAR_DIR = Path(__file__).resolve().parent / "outputs" / "avatars"
+AVATAR_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/avatars", StaticFiles(directory=str(AVATAR_DIR)), name="avatars")
+
 # 服务器启动时间
 _START_TIME = _time.time()
 
@@ -116,14 +123,14 @@ async def startup_event():
     # 自动修复 Windows Redis 常见问题：
     # 1. RDB 目录无写权限 → 重定向到项目目录
     # 2. stop-writes-on-bgsave-error=yes → 持久化失败时拒绝写操作
+    # 3. save 配置 → 确保自动持久化生效
     try:
         import redis as _redis_lib
         r = _redis_lib.Redis.from_url(settings.redis_url, decode_responses=True, socket_connect_timeout=3)
-        # 修复 1: 把 RDB 文件写到项目目录（C:\Program Files\Redis 需要管理员权限）
         _project_dir = str(Path(__file__).resolve().parent)
         r.config_set("dir", _project_dir)
-        # 修复 2: 持久化失败时降级为警告，不拒绝写入
         r.config_set("stop-writes-on-bgsave-error", "no")
+        r.config_set("save", "")  # Windows 上禁用自动 BGSAVE（fork 会断连 Celery），改为手动触发
         logger.info("[startup] Redis 配置已自动修复 (dir=%s)", _project_dir)
     except Exception as _e:
         logger.warning("[startup] 无法自动配置 Redis: %s（如 Redis 未安装请忽略）", _e)
@@ -756,8 +763,17 @@ async def api_videos_list(gallery: bool = False):
     """
     列出所有已生成的视频文件。
     ?gallery=true 时仅返回已收藏到画廊的视频。
+    每条记录会合并视频元数据（标题等）。
     """
     videos = list_videos()
+    metas = get_all_video_metas()
+    # 合并元数据
+    for v in videos:
+        fn = v.get("filename", "")
+        meta = metas.get(fn, {})
+        v["title"] = (meta.get("title") or b"").decode("utf-8") if isinstance(meta.get("title"), bytes) else (meta.get("title") or fn)
+        v["username"] = (meta.get("username") or b"").decode("utf-8") if isinstance(meta.get("username"), bytes) else (meta.get("username") or "匿名")
+        v["created_by"] = v.get("username", "匿名")
     if gallery:
         saved = get_gallery_filenames()
         videos = [v for v in videos if v.get("filename") in saved]
@@ -774,6 +790,17 @@ async def api_videos_save(filename: str):
         return error_response("非法文件名")
     saved = save_to_gallery(filename)
     return success_response({"filename": filename, "saved": saved}, "已收藏" if saved else "已取消收藏")
+
+
+@app.patch("/api/videos/{filename}/title")
+async def api_videos_rename(filename: str, title: str = ""):
+    """修改视频标题（用户自定义命名）"""
+    if not _is_safe_filename(filename):
+        return error_response("非法文件名")
+    if not title or not title.strip():
+        return error_response("标题不能为空")
+    ok = update_video_title(filename, title.strip())
+    return success_response({"filename": filename, "title": title.strip()}, "标题已更新" if ok else "更新失败")
 
 
 @app.delete("/api/videos/{filename}")
@@ -801,6 +828,27 @@ class AsyncGenerateRequest(BaseModel):
 class AsyncRenderRequest(BaseModel):
     """异步渲染请求"""
     code: str
+
+
+@app.post("/api/user/avatar")
+async def api_upload_avatar(file: UploadFile = File(...)):
+    """上传用户头像，返回可访问的 URL"""
+    ALLOWED_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+    if file.content_type not in ALLOWED_TYPES:
+        return error_response("仅支持 JPG/PNG/GIF/WebP 格式")
+    # 限制 2MB
+    contents = await file.read()
+    if len(contents) > 2 * 1024 * 1024:
+        return error_response("头像文件不能超过 2MB")
+    # 用时间戳 + 原始扩展名生成文件名
+    ext = file.filename.split(".")[-1] if "." in (file.filename or "") else "png"
+    safe_ext = ext if ext.lower() in ("jpg", "jpeg", "png", "gif", "webp") else "png"
+    avatar_name = f"avatar_{int(_time.time())}_{uuid.uuid4().hex[:6]}.{safe_ext}"
+    avatar_path = AVATAR_DIR / avatar_name
+    with open(avatar_path, "wb") as f:
+        f.write(contents)
+    url = f"/avatars/{avatar_name}"
+    return success_response({"url": url}, "头像上传成功")
 
 
 class AsyncTemplateRequest(BaseModel):

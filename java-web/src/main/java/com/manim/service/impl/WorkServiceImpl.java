@@ -117,6 +117,7 @@ public class WorkServiceImpl implements WorkService {
                     author != null ? author.getNickname() : "未知用户",
                     w.getLikeCount(),
                     w.getViewCount(),
+                    w.getVideoPath(),
                     w.getCreateTime() != null ? w.getCreateTime().format(fmt) : null
             );
         }).collect(java.util.stream.Collectors.toList());

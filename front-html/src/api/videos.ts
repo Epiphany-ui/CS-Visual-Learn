@@ -7,9 +7,9 @@ const VIDEO_BASE = 'http://localhost:8000'
 export const videosApi = {
   /** 获取视频列表。?gallery=true 时仅返回已收藏到画廊的视频 */
   getList(gallery = false) {
-    return pythonClient.get<ApiResponse<{ items: VideoFile[]; total: number }>>('/api/videos/list', {
-      params: gallery ? { gallery: true } : {},
-    })
+    const params: Record<string, any> = { _: Date.now() }
+    if (gallery) params.gallery = true
+    return pythonClient.get<ApiResponse<{ items: VideoFile[]; total: number }>>('/api/videos/list', { params })
   },
 
   /** Toggle 画廊收藏：已收藏则取消，未收藏则添加 */
@@ -31,6 +31,13 @@ export const videosApi = {
   convertGif(filename: string, fps = 10, width = 480) {
     return pythonClient.post<ApiResponse<{ filename: string; url: string; size_kb: number }>>(`/api/videos/${filename}/convert/gif`, null, {
       params: { fps, width },
+    })
+  },
+
+  /** 修改视频标题 */
+  renameVideo(filename: string, title: string) {
+    return pythonClient.patch<ApiResponse<{ filename: string; title: string }>>(`/api/videos/${filename}/title`, null, {
+      params: { title },
     })
   },
 
