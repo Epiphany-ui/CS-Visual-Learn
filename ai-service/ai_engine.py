@@ -163,7 +163,15 @@ def get_cached_result(user_input: str) -> Optional[Dict]:
     if cache_file.exists():
         try:
             with open(cache_file, "r", encoding="utf-8") as f:
-                return json.load(f)
+                result = json.load(f)
+            # 缓存中的视频文件不存在时，视作缓存失效
+            video_path = result.get("video_path", "")
+            if video_path:
+                video_file = VIDEO_OUTPUT_SUBDIR / Path(video_path).name
+                if not video_file.exists():
+                    cache_file.unlink(missing_ok=True)
+                    return None
+            return result
         except Exception:
             return None
     return None
@@ -481,6 +489,65 @@ def fix_manim_code(original_code: str, error_message: str, context: str = None) 
     if not fixed_code:
         return False, "❌ 未提取到修复后的有效代码"
     return True, fixed_code
+
+
+# ===================== 用户输入预检 =====================
+
+ANIMATION_KEYWORDS = {
+    # 中文
+    "排序", "搜索", "算法", "可视化", "动画", "遍历", "递归",
+    "二叉树", "链表", "栈", "队列", "图", "矩阵", "数组",
+    "哈希", "堆", "树", "查找", "冒泡", "快速排序", "归并",
+    "插入", "选择", "二分", "广度", "深度", "动态规划",
+    "神经网络", "机器学习", "傅里叶", "变换", "聚类",
+    "线性回归", "逻辑回归", "决策树", "随机森林", "梯度下降",
+    "最短路径", "最小生成树", "拓扑", "红黑树", "AVL",
+    "解密", "加密", "压缩", "编码", "解码", "协议",
+    "排序算法", "数据结构", "人脸识别", "图像处理",
+    # English
+    "sort", "search", "algorithm", "visualize", "animation",
+    "tree", "graph", "linked list", "stack", "queue", "array",
+    "hash", "heap", "binary", "recursive", "dynamic programming",
+    "neural network", "machine learning", "fourier", "transform",
+    "gradient descent", "pathfinding", "clustering", "regression",
+    "genetic", "ant colony", "simulated annealing",
+    "data structure", "sorting", "traversal", "depth-first",
+    "breadth-first", "dijkstra", "astar", "kruskal", "prim",
+    "classification", "pca", "svm", "k-means", "dbscan",
+}
+
+
+def validate_requirement(requirement: str) -> dict:
+    """预检用户需求是否与动画/可视化相关"""
+    if not requirement or not requirement.strip():
+        return {"valid": False, "suggestion": "请输入至少 3 个字符的描述"}
+    text = requirement.strip()
+    if len(text) < 3:
+        return {"valid": False, "suggestion": "请输入至少 3 个字符的描述"}
+    if len(text) > 1000:
+        return {"valid": False, "suggestion": "描述超过 1000 字符，请精简后重试"}
+
+    # 关键词检测
+    lower = text.lower()
+    hits = sum(1 for kw in ANIMATION_KEYWORDS if kw.lower() in lower)
+
+    if hits == 0:
+        return {
+            "valid": False,
+            "suggestion": (
+                "您的描述似乎与动画可视化无关，试试这样说：\n"
+                "  · 冒泡排序算法可视化\n"
+                "  · 二叉树的遍历动画\n"
+                "  · 快速排序过程演示"
+            ),
+        }
+    if hits == 1:
+        return {
+            "valid": True,
+            "warn": True,
+            "suggestion": "描述较模糊，建议更具体一些，例如「冒泡排序算法可视化」",
+        }
+    return {"valid": True, "warn": False, "suggestion": ""}
 
 
 def run_full_pipeline(user_requirement: str, max_retry: int = DEFAULT_RETRY_TIMES, progress_callback=None) -> Dict:

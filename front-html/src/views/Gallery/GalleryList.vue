@@ -64,7 +64,8 @@ const videos = computed(() => {
 
 const myWorksCount = computed(() => {
   if (serverMyWorks.value.length > 0) return serverMyWorks.value.length
-  return getMyWorks().length
+  const works = getMyWorks()
+  return allVideos.value.filter(v => works.includes(v.filename)).length
 })
 const starsCount = computed(() => starredVideos.value.length)
 
@@ -209,7 +210,7 @@ async function syncPendingTasks() {
     let changed = false
     for (const tid of pending.slice(0, 10)) {
       try {
-        const res = await tasksApi.getTaskStatus(tid)
+        const res = await tasksApi.getTask(tid)
         const data = res.data
         const vp = data?.data?.video_path || ''
         const fn = vp.replace('/videos/', '')
@@ -229,6 +230,12 @@ async function syncPendingTasks() {
 onMounted(() => { loadPublished(); loadAll().then(() => loadStars()).then(() => syncPendingTasks()).then(() => loadMyWorksFromServer()) })
 watch(() => route.query.tab, (t) => {
   if (t === 'all' || t === 'my-works' || t === 'stars') activeTab.value = t
+})
+// 登录状态变化时重新加载数据（退出登录后数据已清理，重新登录后刷新）
+watch(() => localStorage.getItem('token'), () => {
+  if (localStorage.getItem('token')) {
+    loadAll().then(() => loadStars()).then(() => loadMyWorksFromServer())
+  }
 })
 </script>
 

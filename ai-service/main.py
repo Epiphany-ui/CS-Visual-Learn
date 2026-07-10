@@ -33,6 +33,7 @@ from ai_engine import (
     fix_manim_code,
     rag_retrieve_references,
     generate_video_poster,
+    validate_requirement,
     VIDEO_OUTPUT_SUBDIR,
     CODE_OUTPUT_SUBDIR,
 )
@@ -302,8 +303,15 @@ async def api_generate_animation(req: GenerateRequest):
     完整流水线：输入知识点描述 → AI 生成代码 → 自动渲染 → 失败自动修复重试
     返回生成的代码、视频地址、尝试次数、日志
     """
+    check = validate_requirement(req.requirement)
+    if not check["valid"]:
+        return error_response(check["suggestion"])
     try:
         result = run_full_pipeline(req.requirement, max_retry=req.max_retry)
+        # 如果所有重试都失败，返回友好消息
+        if not result.get("success"):
+            friendly_msg = _friendly_fail_message(req.requirement, result)
+            result["log"] = friendly_msg
         return success_response(result, "任务执行完成")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -312,6 +320,9 @@ async def api_generate_animation(req: GenerateRequest):
 @app.post("/api/ai/generate-code")
 async def api_generate_code(req: GenerateCodeRequest):
     """只生成 Manim 代码，不执行渲染"""
+    check = validate_requirement(req.requirement)
+    if not check["valid"]:
+        return error_response(check["suggestion"])
     try:
         success, result = generate_manim_code(req.requirement)
         if not success:
@@ -362,6 +373,31 @@ async def api_rag_retrieve(req: RetrieveRequest):
 def _is_safe_filename(filename: str) -> bool:
     """防止路径穿越攻击：文件名不得包含 .. 或路径分隔符"""
     return ".." not in filename and "/" not in filename and "\\" not in filename
+
+
+def _friendly_fail_message(requirement: str, result: dict) -> str:
+    """将渲染失败日志转换为对用户友好的消息"""
+    log = result.get("log", "")
+    try_count = result.get("try_count", 0)
+    if not result.get("code"):
+        return (
+            f"您的需求「{requirement[:50]}」未能被 AI 理解并生成有效代码。\n"
+            "建议尝试更具体的描述，例如：\n"
+            "  · 冒泡排序算法可视化\n"
+            "  · 二叉树的遍历动画\n"
+            "  · 快速排序过程演示"
+        )
+    if "ModuleNotFoundError" in log or "ImportError" in log:
+        return "渲染失败：缺少所需的 Python 库。请联系管理员安装依赖。"
+    if "Timeout" in log or "超时" in log:
+        return f"渲染超时（尝试 {try_count} 次后放弃）。动画可能过于复杂，建议简化。"
+    return (
+        f"渲染未能成功完成（尝试 {try_count} 次后放弃）。\n"
+        "您可以尝试：\n"
+        "  1. 修改需求描述，使其更具体\n"
+        "  2. 参考右侧快速模板\n"
+        "  3. 检查 Celery Worker 是否正常运行"
+    )
 
 # ===================== 百科词条接口 =====================
 WIKI_DATA_DIR = Path(__file__).resolve().parent / "wiki_data"
@@ -926,6 +962,9 @@ async def api_async_generate(req: AsyncGenerateRequest):
      异步全流程生成：提交需求 → 立即返回 task_id → Celery Worker 后台处理。
     前端通过 GET /api/tasks/{task_id}/stream (SSE) 获取实时进度。
     """
+    check = validate_requirement(req.requirement)
+    if not check["valid"]:
+        return error_response(check["suggestion"])
     try:
         from workers.celery_app import generate_full_task
         task = generate_full_task.delay(req.requirement, req.max_retry)
