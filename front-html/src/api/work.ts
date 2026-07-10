@@ -39,7 +39,7 @@ export const workApi = {
     formData.append('isPublic', String(params.isPublic))
     formData.append('code', params.code)
     formData.append('previewUrl', params.previewUrl || '')
-    return javaClient.post<ApiResponse<{ publishedWorkId: number }>>('/api/v1/work/publish', formData, {
+    return javaClient.post<ApiResponse<{ publishedWorkId: number }>>('/work/publish', formData, {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     })
   },
@@ -49,7 +49,7 @@ export const workApi = {
     const { status, page = 1, size = 10 } = params
     const query: Record<string, any> = { page, size }
     if (status != null) query.status = status
-    return javaClient.get<ApiResponse<{ list: WorkInfo[]; total: number }>>('/api/v1/user/work/list', { params: query })
+    return javaClient.get<ApiResponse<{ list: WorkInfo[]; total: number }>>('/user/work/list', { params: query })
   },
 
   /** 获取我的作品列表（个人中心首页数据） */
@@ -61,16 +61,16 @@ export const workApi = {
       checkinDays: number
       followerCount: number
       followeeCount: number
-    }>>('/api/v1/user/home/data')
+    }>>('/user/home/data')
   },
 
   /** 删除作品（仅创建者或管理员） */
   delete(workId: number) {
-    return javaClient.delete(`/api/v1/work/${workId}`)
+    return javaClient.delete(`/work/${workId}`)
   },
 
   /** 根据视频路径删除已发布的作品（删除视频时同步清理） */
   deleteByVideoPath(videoPath: string) {
-    return javaClient.delete(`/api/v1/work/by-video-path`, { params: { path: videoPath } })
+    return javaClient.delete(`/work/by-video-path`, { params: { path: videoPath } })
   },
 }

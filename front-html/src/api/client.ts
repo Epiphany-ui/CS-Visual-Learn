@@ -45,6 +45,10 @@ const errorInterceptor = (error: any) => {
       ElMessage.warning('请求过于频繁，请稍后重试')
     } else if (status >= 500) {
       ElMessage.error(data?.detail || data?.message || '服务器内部错误')
+    } else {
+      // 400 / 403 / 404 等，显示后端返回的具体错误
+      const msg = data?.message || data?.msg || data?.detail || `请求失败（${status}）`
+      ElMessage.error(msg)
     }
   } else {
     ElMessage.error('网络连接失败，请检查后端服务')

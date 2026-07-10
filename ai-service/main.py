@@ -761,6 +761,15 @@ async def api_task_stream(task_id: str):
     )
 
 
+# ===================== 视频文件列表 =====================
+
+@app.get("/api/videos/filenames")
+async def api_videos_filenames():
+    """返回所有现有视频的文件名列表（轻量，供社区页面做存在性校验）"""
+    videos = list_videos()
+    return success_response([v["filename"] for v in videos], "ok")
+
+
 @app.get("/api/videos/list")
 async def api_videos_list(gallery: bool = False, my_works: bool = False, username: str = ""):
     """
@@ -844,6 +853,30 @@ async def api_videos_delete(filename: str):
     if deleted:
         return success_response(None, f"已删除 {filename}")
     return error_response(f"文件 {filename} 不存在")
+
+
+# ===================== 视频代码读取 =====================
+
+@app.get("/api/videos/{filename}/code")
+async def api_videos_code(filename: str, format: str = "json"):
+    """读取生成视频时使用的 Manim 代码"""
+    if not filename.endswith(".mp4"):
+        return error_response("仅支持 .mp4 文件")
+    if not _is_safe_filename(filename):
+        return error_response("非法文件名")
+
+    from pathlib import Path
+    code_path = CODE_OUTPUT_SUBDIR / f"{Path(filename).stem}.py"
+    if not code_path.exists():
+        return error_response(f"代码文件 {code_path.name} 不存在")
+
+    code_text = code_path.read_text(encoding="utf-8")
+
+    if format == "raw":
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse(code_text, media_type="text/plain; charset=utf-8")
+
+    return success_response({"code": code_text, "filename": code_path.name}, "读取成功")
 
 
 # ===================== v1.0 异步任务端点（Celery 驱动） =====================

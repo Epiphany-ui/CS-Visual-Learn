@@ -138,12 +138,14 @@ def list_videos() -> list:
 
 
 def delete_video(filename: str) -> bool:
-    """删除指定视频文件及对应的代码文件"""
+    """删除指定视频文件、代码文件、缩略图及 Redis 元数据"""
     from pathlib import Path
 
     base = Path(__file__).resolve().parent.parent / "outputs"
     video_path = base / "videos" / filename
-    code_path = base / "code" / f"{Path(filename).stem}.py"
+    stem = Path(filename).stem
+    code_path = base / "code" / f"{stem}.py"
+    thumb_path = base / "videos" / f"{stem}.jpg"
 
     deleted = False
     if video_path.exists():
@@ -152,6 +154,17 @@ def delete_video(filename: str) -> bool:
     if code_path.exists():
         code_path.unlink()
         deleted = True
+    if thumb_path.exists():
+        thumb_path.unlink()
+
+    # 清理 Redis 元数据
+    try:
+        r = _get_redis()
+        r.delete(f"{VIDEO_META_PREFIX}:{filename}")
+        r.srem(GALLERY_KEY, filename)
+    except Exception:
+        pass
+
     return deleted
 
 
