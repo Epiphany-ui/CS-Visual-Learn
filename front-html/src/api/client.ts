@@ -1,9 +1,9 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
-// Java 业务后端 (port 8080)
+// Java 业务后端 (port 8080, 带 /api/v1 路径前缀)
 export const javaClient = axios.create({
-  baseURL: 'http://localhost:8080',
+  baseURL: 'http://localhost:8080/api/v1',
   timeout: 15000,
   headers: { 'Content-Type': 'application/json' },
 })
