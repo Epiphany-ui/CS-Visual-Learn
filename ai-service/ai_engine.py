@@ -57,6 +57,34 @@ OUTPUT_DIR = BASE_DIR / "outputs"
 CODE_OUTPUT_SUBDIR = OUTPUT_DIR / "code"
 VIDEO_OUTPUT_SUBDIR = OUTPUT_DIR / "videos"
 CACHE_DIR = BASE_DIR / "cache"
+
+# 确保目录存在
+CODE_OUTPUT_SUBDIR.mkdir(parents=True, exist_ok=True)
+VIDEO_OUTPUT_SUBDIR.mkdir(parents=True, exist_ok=True)
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def generate_video_poster(video_filename: str):
+    """用 ffmpeg 截取视频第 2 秒帧作为封面缩略图（.jpg）
+
+    此函数设计为在渲染成功后调用，失败静默（缩略图缺失不影响主流程）。
+    同时被 ai_engine.render_manim_animation 和 celery_app 异步任务复用。
+    """
+    if not video_filename:
+        return
+    try:
+        video_file = VIDEO_OUTPUT_SUBDIR / video_filename
+        poster_file = VIDEO_OUTPUT_SUBDIR / f"{Path(video_filename).stem}.jpg"
+        if not video_file.exists() or poster_file.exists():
+            return
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", str(video_file), "-ss", "2", "-vframes", "1",
+             "-q:v", "3", str(poster_file)],
+            capture_output=True, timeout=15,
+            encoding="utf-8", errors="replace",
+        )
+    except Exception:
+        pass  # 缩略图生成失败不影响主流程
 RENDER_QUALITY_FLAG: str = os.getenv("RENDER_QUALITY_FLAG", "-qm")
 RENDER_TIMEOUT: int = int(os.getenv("RENDER_TIMEOUT", "120"))
 
@@ -406,6 +434,8 @@ def render_manim_animation(code_str: str, progress_callback=None) -> Tuple[bool,
 
         if process.returncode == 0 and video_output_path.exists():
             web_accessible_url = f"/videos/{task_id}.mp4"
+            # 渲染成功后自动生成缩略图（静默失败不影响主流程）
+            generate_video_poster(f"{task_id}.mp4")
             if progress_callback:
                 progress_callback("success", web_accessible_url)
             return True, f"✅ 渲染成功\n{full_log}", web_accessible_url
@@ -420,13 +450,19 @@ def render_manim_animation(code_str: str, progress_callback=None) -> Tuple[bool,
         return False, f"❌ 渲染执行异常：{str(e)}", ""
 
 
-def fix_manim_code(original_code: str, error_message: str) -> Tuple[bool, str]:
+def fix_manim_code(original_code: str, error_message: str, context: str = None) -> Tuple[bool, str]:
+    """AI 修复代码
+    :param original_code: 原始有错误的代码
+    :param error_message: 报错信息（Manim 渲染 stderr）
+    :param context: 用户原始需求描述（可选，帮助 AI 理解意图后做针对性修复）
+    """
     # 从外部 Prompt 模板文件加载 System Prompt（支持热重载，修改即生效）
     system_prompt = _get_prompt_service().render(
         "code_fix",
         error_message=error_message,
     )
-    user_prompt = f"请修复以下Manim代码：\n```python\n{original_code}\n```"
+    context_part = f"\n\n用户原始需求：{context}\n请根据需求理解用户意图，除了修复语法错误，如果需要调整动画参数、逻辑或展示方式才能满足需求，也请一并修改。" if context else ""
+    user_prompt = f"请修复以下Manim代码：\n```python\n{original_code}\n```{context_part}"
 
     messages = [
         {"role": "system", "content": system_prompt},

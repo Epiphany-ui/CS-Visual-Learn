@@ -18,35 +18,34 @@ if str(_AI_SERVICE_DIR) not in sys.path:
     sys.path.insert(0, str(_AI_SERVICE_DIR))
 
 from celery import Celery
-from ai_engine import render_manim_animation, run_full_pipeline, extract_scene_class_name
+from ai_engine import render_manim_animation, run_full_pipeline, extract_scene_class_name, generate_video_poster
 from services.config import settings
 from services.template_service import template_service
-from services.progress_service import set_progress, get_progress, save_video_meta
+from services.progress_service import set_progress, get_progress, save_video_meta, is_task_cancelled
+from pathlib import Path as _Path
 from services.logging_config import get_logger
 
-_VIDEO_DIR = Path(__file__).resolve().parent.parent / "outputs" / "videos"
-
-
-def _generate_poster(video_path: str):
-    """用 ffmpeg 截取视频第 2 秒帧作为封面缩略图"""
-    if not video_path:
-        return
-    try:
-        fn = video_path.replace("/videos/", "")
-        video_file = _VIDEO_DIR / fn
-        poster_file = _VIDEO_DIR / f"{Path(fn).stem}.jpg"
-        if not video_file.exists() or poster_file.exists():
-            return
-        subprocess.run(
-            ["ffmpeg", "-y", "-i", str(video_file), "-ss", "2", "-vframes", "1",
-             "-q:v", "3", str(poster_file)],
-            capture_output=True, timeout=15,
-            encoding="utf-8", errors="replace",
-        )
-    except Exception:
-        pass  # 缩略图生成失败不影响主流程
-
 logger = get_logger("celery")
+
+_VIDEO_DIR = _Path(__file__).resolve().parent.parent / "outputs" / "videos"
+
+
+def _cleanup_if_cancelled(task_id: str, video_path: str):
+    """如果任务已被用户取消，删除已生成的视频和缩略图，返回 True 表示已清理"""
+    if is_task_cancelled(task_id):
+        logger.info(f"[cancel] 任务 {task_id} 已被用户取消，清理: {video_path}")
+        try:
+            fn = video_path.replace("/videos/", "") if video_path else ""
+            if fn:
+                for ext in (".mp4", ".jpg"):
+                    f = _VIDEO_DIR / f"{_Path(fn).stem}{ext}"
+                    if f.exists():
+                        f.unlink()
+        except Exception:
+            pass
+        set_progress(task_id, state="CANCELLED", progress=0, message="用户已取消")
+        return True
+    return False
 
 # Celery 配置 — Redis 地址从统一配置读取
 celery_app = Celery(
@@ -100,10 +99,11 @@ def render_code_task(self, code: str):
         success, log, video_path = render_manim_animation(code, progress_callback=on_progress)
 
         if success:
+            if _cleanup_if_cancelled(task_id, video_path):
+                return {"success": False, "error": "cancelled"}
             fn = video_path.replace("/videos/", "") if video_path else ""
             if fn:
                 scene = extract_scene_class_name(code) or "Manim"
-                _generate_poster(video_path)
                 save_video_meta(fn, title=f"{scene} 渲染")
             set_progress(task_id, state="SUCCESS", progress=100,
                          message="渲染完成", video_path=video_path, log=log, code=code)
@@ -133,9 +133,10 @@ def generate_full_task(self, requirement: str, max_retry: int = 3):
         vp = result.get("video_path", "")
         code_str = result.get("code", "")
         if result.get("success"):
+            if _cleanup_if_cancelled(task_id, vp):
+                return {"success": False, "error": "cancelled"}
             fn = vp.replace("/videos/", "") if vp else ""
             if fn:
-                _generate_poster(vp)
                 save_video_meta(fn, title=requirement[:80])
             set_progress(task_id, state="SUCCESS", progress=100,
                          message="生成完成", video_path=vp,
@@ -175,6 +176,8 @@ def render_template_task(self, template_id: str, params: dict):
         cache_key = hashlib.md5(f"{template_id}:{json.dumps(params, sort_keys=True)}".encode()).hexdigest()[:16]
         cached = get_progress(f"tpl:{cache_key}")
         if cached.get("video_path"):
+            if _cleanup_if_cancelled(task_id, cached["video_path"]):
+                return {"success": False, "error": "cancelled"}
             vp = cached["video_path"]
             set_progress(task_id, state="SUCCESS", progress=100,
                          message="渲染完成（缓存命中）", video_path=vp, log="", code=code)
@@ -187,11 +190,12 @@ def render_template_task(self, template_id: str, params: dict):
         success, log, video_path = render_manim_animation(code, progress_callback=on_progress)
 
         if success:
+            if _cleanup_if_cancelled(task_id, video_path):
+                return {"success": False, "error": "cancelled"}
             fn = video_path.replace("/videos/", "") if video_path else ""
             if fn:
                 tpl = template_service.get_template_detail(template_id)
                 tpl_name = tpl[1].get("name", template_id) if tpl[0] else template_id
-                _generate_poster(video_path)
                 save_video_meta(fn, title=f"{tpl_name}")
             # 缓存结果：相同模板+参数下次秒级返回
             set_progress(f"tpl:{cache_key}", state="SUCCESS", progress=100,
