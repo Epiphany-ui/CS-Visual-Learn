@@ -8,6 +8,7 @@
 import json
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import Optional, Dict, List
 
 import redis
@@ -29,6 +30,49 @@ def _get_redis() -> redis.Redis:
     if _redis_client is None:
         _redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
     return _redis_client
+
+
+# ===================== 视频元数据持久化（JSON 文件，Redis 重启后恢复） =====================
+
+META_FILE = Path(__file__).resolve().parent.parent / "outputs" / "video_meta.json"
+
+
+def _read_meta_file() -> dict:
+    """从 JSON 文件读取所有视频元数据"""
+    try:
+        if META_FILE.exists():
+            with open(META_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {}
+
+
+def _write_meta_file(meta: dict):
+    """写入视频元数据到 JSON 文件"""
+    try:
+        META_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(META_FILE, "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def _restore_meta_to_redis():
+    """Redis 启动后，从 JSON 文件恢复所有标题到 Redis"""
+    meta = _read_meta_file()
+    if not meta:
+        return
+    try:
+        r = _get_redis()
+        for filename, data in meta.items():
+            key = f"{VIDEO_META_PREFIX}:{filename}"
+            r.hset(key, "title", data.get("title", filename))
+            r.hset(key, "created_at", data.get("created_at", ""))
+            r.hset(key, "username", data.get("username", "匿名"))
+            r.expire(key, 86400 * 30)
+    except Exception:
+        pass
 
 
 # ===================== 任务进度管理 =====================
@@ -165,6 +209,15 @@ def delete_video(filename: str) -> bool:
     except Exception:
         pass
 
+    # 清理 JSON 文件中的元数据
+    try:
+        meta = _read_meta_file()
+        if filename in meta:
+            del meta[filename]
+            _write_meta_file(meta)
+    except Exception:
+        pass
+
     return deleted
 
 
@@ -174,19 +227,29 @@ VIDEO_META_PREFIX = "cs:video"  # Redis Hash: 视频元数据 {filename} → {ti
 
 
 def save_video_meta(filename: str, title: str = "", username: str = ""):
-    """保存视频元数据（标题、创建时间、发布者）"""
+    """保存视频元数据（标题、创建时间、发布者）——同时写入 Redis 和 JSON 文件"""
     try:
         r = _get_redis()
         key = f"{VIDEO_META_PREFIX}:{filename}"
         r.hset(key, "title", title or filename)
         r.hset(key, "created_at", datetime.now().isoformat())
         r.hset(key, "username", username or "匿名")
-        r.expire(key, 86400 * 30)  # 30 天过期
-        # 同步加入用户作品列表（服务端持久化）
+        r.expire(key, 86400 * 30)
         if username and username != "匿名":
             r.sadd(f"{VIDEO_META_PREFIX}:user-works:{username}", filename)
             r.expire(f"{VIDEO_META_PREFIX}:user-works:{username}", 86400 * 90)
-        _maybe_bgsave()
+    except Exception:
+        pass
+
+    # 同步写入 JSON 文件（持久化，Redis 重启后恢复）
+    try:
+        meta = _read_meta_file()
+        meta[filename] = {
+            "title": title or filename,
+            "created_at": datetime.now().isoformat(),
+            "username": username or "匿名",
+        }
+        _write_meta_file(meta)
     except Exception:
         pass
 
@@ -223,7 +286,7 @@ def get_video_meta(filename: str) -> dict:
 
 
 def get_all_video_metas() -> dict:
-    """批量获取所有视频元数据（{filename: {title, ...}}）"""
+    """批量获取所有视频元数据——优先 Redis，回退到 JSON 文件"""
     try:
         r = _get_redis()
         result = {}
@@ -232,35 +295,53 @@ def get_all_video_metas() -> dict:
             cursor, keys = r.scan(cursor, match=f"{VIDEO_META_PREFIX}:*", count=200)
             for key in keys:
                 ks = key.decode("utf-8") if isinstance(key, bytes) else key
-                # 跳过 user-works Set 键（它们不是 Hash，hgetall 会抛 WRONGTYPE）
                 if ":user-works:" in ks:
                     continue
                 fname = ks.replace(f"{VIDEO_META_PREFIX}:", "")
                 try:
                     result[fname] = r.hgetall(key) or {}
                 except Exception:
-                    continue  # 跳过类型不匹配的键
+                    continue
             if cursor == 0:
                 break
-        return result
+        if result:
+            return result
     except Exception:
-        return {}
+        pass
+
+    # Redis 无数据时从 JSON 文件恢复
+    file_meta = _read_meta_file()
+    if file_meta:
+        # 异步恢复到 Redis（不阻塞）
+        try:
+            _restore_meta_to_redis()
+        except Exception:
+            pass
+    return file_meta
 
 
 def update_video_title(filename: str, new_title: str) -> bool:
-    """修改视频标题"""
+    """修改视频标题——同时更新 Redis 和 JSON 文件"""
     try:
         r = _get_redis()
         key = f"{VIDEO_META_PREFIX}:{filename}"
         if r.exists(key):
             r.hset(key, "title", new_title)
         else:
-            # 如果元数据不存在，创建
             save_video_meta(filename, title=new_title)
-        _maybe_bgsave()
-        return True
     except Exception:
-        return False
+        pass
+
+    # 同步更新 JSON 文件
+    try:
+        meta = _read_meta_file()
+        if filename in meta:
+            meta[filename]["title"] = new_title
+            _write_meta_file(meta)
+    except Exception:
+        pass
+
+    return True
 
 
 # ===================== 画廊收藏管理 =====================

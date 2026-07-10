@@ -17,6 +17,7 @@ import chromadb
 import requests
 
 from services.logging_config import get_logger
+from services.progress_service import save_video_meta
 
 logger = get_logger("ai_engine")
 
@@ -77,14 +78,18 @@ def generate_video_poster(video_filename: str):
         poster_file = VIDEO_OUTPUT_SUBDIR / f"{Path(video_filename).stem}.jpg"
         if not video_file.exists() or poster_file.exists():
             return
-        subprocess.run(
+        result = subprocess.run(
             ["ffmpeg", "-y", "-i", str(video_file), "-ss", "2", "-vframes", "1",
              "-q:v", "3", str(poster_file)],
             capture_output=True, timeout=15,
             encoding="utf-8", errors="replace",
         )
-    except Exception:
-        pass  # 缩略图生成失败不影响主流程
+        if result.returncode != 0:
+            logger.warning("缩略图生成失败 (ffmpeg returncode=%d): %s", result.returncode, result.stderr[:200])
+    except FileNotFoundError:
+        logger.warning("缩略图生成失败：未找到 ffmpeg，请安装 ffmpeg 并加入 PATH")
+    except Exception as e:
+        logger.warning("缩略图生成异常: %s", str(e))
 RENDER_QUALITY_FLAG: str = os.getenv("RENDER_QUALITY_FLAG", "-qm")
 RENDER_TIMEOUT: int = int(os.getenv("RENDER_TIMEOUT", "120"))
 
@@ -511,6 +516,10 @@ def run_full_pipeline(user_requirement: str, max_retry: int = DEFAULT_RETRY_TIME
 
         if render_success:
             result.update({"success": True, "video_path": video_path, "log": "\n".join(all_logs)})
+            # 保存视频标题到 Redis，供前端显示文字描述而非 UUID
+            fn = video_path.replace("/videos/", "") if video_path else ""
+            if fn:
+                save_video_meta(fn, title=user_requirement[:80])
             save_to_cache(user_requirement, result)
             return result
 
@@ -536,6 +545,9 @@ def run_full_pipeline(user_requirement: str, max_retry: int = DEFAULT_RETRY_TIME
 
             if render_success:
                 result.update({"success": True, "video_path": video_path, "log": "\n".join(all_logs)})
+                fn = video_path.replace("/videos/", "") if video_path else ""
+                if fn:
+                    save_video_meta(fn, title=user_requirement[:80])
                 save_to_cache(user_requirement, result)
                 return result
 

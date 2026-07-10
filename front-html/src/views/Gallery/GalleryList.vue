@@ -16,6 +16,11 @@ const loading = ref(false)
 const deleting = ref<string | null>(null)
 const publishing = ref<string | null>(null)
 const publishedWorks = ref<string[]>([])
+const thumbFailed = ref<Set<string>>(new Set())
+
+function onThumbError(event: Event, v: any) {
+  thumbFailed.value = new Set([...thumbFailed.value, v.filename])
+}
 
 const activeTab = ref<'all' | 'my-works' | 'stars'>(
   (route.query.tab as 'all' | 'my-works' | 'stars') || 'all',
@@ -253,9 +258,13 @@ watch(() => route.query.tab, (t) => {
         <div class="g-thumb">
           <img :src="(v as any).poster || videosApi.getThumbnailUrl(v.filename)"
                loading="lazy" class="g-thumb-img"
-               @error="($event.target as HTMLImageElement).style.display='none'"
+               @error="onThumbError($event, v)"
                :alt="getTitle(v)" />
           <div class="g-play"><el-icon :size="32"><VideoPlay /></el-icon></div>
+          <div v-if="thumbFailed.has(v.filename)" class="g-thumb-placeholder">
+            <el-icon :size="40"><VideoCamera /></el-icon>
+            <span>无封面</span>
+          </div>
         </div>
         <div class="g-info">
           <h4 :title="getTitle(v)">{{ getTitle(v) }}</h4>
@@ -322,6 +331,7 @@ watch(() => route.query.tab, (t) => {
 .g-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
 .g-thumb { position: relative; aspect-ratio: 16/9; background: var(--bg-secondary); overflow: hidden; }
 .g-thumb-img { width: 100%; height: 100%; object-fit: cover; }
+.g-thumb-placeholder { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--text-tertiary); font-size: 0.75rem; }
 .g-play { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.3); opacity: 0; transition: opacity var(--transition-fast); color: white; }
 .g-card:hover .g-play { opacity: 1; }
 .g-info { padding: var(--space-md); }
