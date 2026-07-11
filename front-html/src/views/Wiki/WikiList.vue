@@ -102,7 +102,7 @@ onMounted(() => { loadCategories(); loadList() })
 
     <!-- 词条列表 -->
     <div v-loading="loading" class="wiki-grid">
-      <RevealOnScroll v-for="item in items" :key="item.slug" as-child>
+      <RevealOnScroll v-for="item in items" :key="item.slug" as-child direction="up" bounce :delay="0">
       <div
         class="wiki-card glass-card"
         @click="router.push(`/wiki/${item.slug}`)"

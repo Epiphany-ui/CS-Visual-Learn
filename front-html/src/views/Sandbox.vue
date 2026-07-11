@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { generationApi } from '@/api/generation'
 import { videosApi } from '@/api/videos'
@@ -8,6 +8,7 @@ import { useTaskStore } from '@/stores/task'
 import type { SSETaskEvent, SSEDoneEvent } from '@/types/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import CodeEditor from '@/components/common/CodeEditor.vue'
+import CanvasTypewriter from '@/components/common/CanvasTypewriter.vue'
 
 const route = useRoute()
 const taskStore = useTaskStore()
@@ -15,6 +16,7 @@ const { connect, disconnect } = useSSE()
 
 const requirement = ref('')
 const code = ref('')
+const typingActive = ref(false) // Canvas typewriter 动画进行中
 const videoPath = ref('')
 const videoUrl = ref('')
 const generating = ref(false)
@@ -28,9 +30,23 @@ const publishDialogVisible = ref(false)
 const publishDesc = ref('')
 const renderQuality = ref(localStorage.getItem('cs:render-quality') || '-qm')
 let _activeTaskId = ''
+let _aiChanging = false   // 标记正在由 AI 修改代码（触发 typewriter）
 let _progressTimer: ReturnType<typeof setInterval> | null = null
 let _progressTarget = 0
 let _taskCompleted = false // 防止 onerror 覆盖已完成的结果
+
+// ========== Canvas Typewriter 画笔写入效果 ==========
+function onCanvasDone() {
+  typingActive.value = false
+}
+
+// 监听 AI 带来的代码变更 → 触发 Canvas typewriter
+watch(code, (newVal, oldVal) => {
+  if (_aiChanging && newVal && newVal !== oldVal) {
+    _aiChanging = false
+    typingActive.value = true
+  }
+})
 
 // ========== 状态持久化：离开再回来界面不变 ==========
 const STATE_KEY = 'cs:sandbox-state'
@@ -99,7 +115,7 @@ function onTaskDone(success: boolean) {
 
 function onSSEEvent(evt: SSETaskEvent) {
   progressMsg.value = evt.message || progressMsg.value
-  if ((evt as any).code) code.value = (evt as any).code
+  if ((evt as any).code) { _aiChanging = true; code.value = (evt as any).code }
   if (evt.video_path) {
     videoPath.value = evt.video_path
     videoUrl.value = `http://localhost:8000${evt.video_path}`
@@ -236,6 +252,7 @@ async function handleFixCode() {
     const res = await generationApi.fixCode(code.value, err, requirement.value || undefined)
     const fixed = res.data.data?.code
     if (fixed && fixed !== code.value) {
+      _aiChanging = true
       code.value = fixed
       ElMessage.success('AI 已根据错误信息和原始需求修复代码，请重新渲染验证')
     } else {
@@ -400,8 +417,15 @@ onUnmounted(() => {
             <el-icon><MagicStick /></el-icon> AI 修复
           </el-button>
         </div>
-        <div class="panel-body code-panel-body">
-          <CodeEditor v-model="code" :readonly="false" />
+        <div class="panel-body code-panel-body" style="position:relative">
+          <CodeEditor v-if="!typingActive" v-model="code" :readonly="false" />
+          <!-- Canvas 画笔覆盖层 -->
+          <CanvasTypewriter
+            v-if="typingActive"
+            :code="code"
+            :active="typingActive"
+            @done="onCanvasDone"
+          />
         </div>
       </div>
 
@@ -441,30 +465,175 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.sandbox-page { padding: var(--space-lg); max-width: 1500px; margin: 0 auto; }
-.sb-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-md); }
-.sb-title { font-size: 1.3rem; font-weight: 800; display: flex; align-items: center; gap: var(--space-sm); background: var(--gradient-primary); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-.sb-actions { display: flex; gap: var(--space-sm); }
-.progress-bar-wrap { margin-bottom: var(--space-md); display: flex; align-items: center; gap: var(--space-md); background: var(--bg-card); padding: var(--space-sm) var(--space-md); border-radius: var(--radius-md); border: 1px solid var(--border-color); animation: scale-in 0.3s var(--ease-bounce) both; }
-.progress-bar-wrap :deep(.el-progress-bar__outer) { background: var(--bg-secondary); overflow: hidden; }
-.progress-bar-wrap :deep(.el-progress-bar__inner) { background: linear-gradient(90deg, var(--accent-purple), var(--accent-blue), var(--accent-cyan)); background-size: 200% 100%; animation: gradient-shift 2s linear infinite; }
-.progress-msg { color: var(--text-secondary); font-size: 0.85rem; white-space: nowrap; }
-.preview-video { animation: scale-in 0.5s var(--ease-spring) both; max-width: 100%; max-height: 100%; border-radius: var(--radius-md); }
-.sb-panels { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--space-md); height: calc(100vh - 180px); }
-.sb-panel { display: flex; flex-direction: column; border: 1px solid var(--border-color); border-radius: var(--radius-lg); background: var(--bg-card); overflow: hidden; }
-.panel-header { padding: 10px var(--space-md); font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; border-bottom: 1px solid var(--border-color); background: var(--bg-secondary); }
+/* ====== Canvas 画布风格沙箱 ====== */
+.sandbox-page {
+  padding: var(--space-lg); max-width: 1600px; margin: 0 auto;
+  min-height: calc(100vh - var(--header-height));
+  position: relative;
+  /* 画布底色 */
+  background:
+    /* 噪点纹理 */
+    repeating-conic-gradient(rgba(255,255,255,0.008) 0% 25%, transparent 0% 50%) 50% / 3px 3px,
+    /* 暖灰画布 */
+    var(--bg-primary);
+}
+[data-theme="light"] .sandbox-page {
+  background:
+    repeating-conic-gradient(rgba(0,0,0,0.02) 0% 25%, transparent 0% 50%) 50% / 3px 3px,
+    #faf8f5;
+}
+
+/* 画布网格点阵 */
+.sandbox-page::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  background-image: radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
+  mask-image: radial-gradient(ellipse at 50% 0%, black 40%, transparent 80%);
+}
+[data-theme="light"] .sandbox-page::before {
+  background-image: radial-gradient(circle, rgba(0,0,0,0.08) 1px, transparent 1px);
+}
+
+/* ====== 工具栏 — 调色板风格 ====== */
+.sb-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: var(--space-md); position: relative; z-index: 1;
+  padding: 10px 20px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%);
+  border: 1.5px solid var(--border-color); border-radius: var(--radius-xl);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+}
+[data-theme="light"] .sb-toolbar {
+  background: linear-gradient(180deg, #fff 0%, #faf8f5 100%);
+  border-color: #d4c8b8;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+}
+.sb-title {
+  font-size: 1.1rem; font-weight: 800; display: flex; align-items: center; gap: var(--space-sm);
+  background: var(--gradient-primary);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  letter-spacing: -0.01em;
+}
+.sb-actions { display: flex; gap: var(--space-sm); align-items: center; }
+
+/* 进度条 — 颜料涂抹 */
+.progress-bar-wrap {
+  margin-bottom: var(--space-md); display: flex; align-items: center; gap: var(--space-md);
+  padding: var(--space-sm) var(--space-lg);
+  border-radius: var(--radius-xl); border: 1.5px solid var(--border-color);
+  position: relative; z-index: 1;
+  background: linear-gradient(135deg, rgba(124,58,237,0.06) 0%, rgba(6,182,212,0.04) 100%);
+  animation: scale-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  box-shadow: 0 2px 16px rgba(124,58,237,0.06);
+}
+.progress-bar-wrap :deep(.el-progress-bar__outer) { background: rgba(255,255,255,0.05); overflow: hidden; border-radius: var(--radius-full); }
+.progress-bar-wrap :deep(.el-progress-bar__inner) {
+  background: linear-gradient(90deg, var(--accent-purple), var(--accent-blue), var(--accent-cyan));
+  background-size: 200% 100%; animation: gradient-shift 2s linear infinite;
+}
+.progress-msg { color: var(--text-secondary); font-size: 0.85rem; white-space: nowrap; flex: 1; }
+
+@keyframes gradient-shift { 0% { background-position: 0% 50%; } 100% { background-position: 200% 50%; } }
+
+/* 三栏画架布局 */
+.sb-panels {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--space-md); height: calc(100vh - 220px);
+  position: relative; z-index: 1;
+}
+
+/* 面板 — 画框风格 */
+.sb-panel {
+  display: flex; flex-direction: column;
+  background: linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%);
+  border-radius: var(--radius-xl);
+  border: 2px solid rgba(255,255,255,0.06);
+  overflow: hidden; transition: all 0.3s ease;
+  backdrop-filter: blur(8px);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.03),
+    0 4px 24px rgba(0,0,0,0.1);
+}
+[data-theme="light"] .sb-panel {
+  background: #fffefc;
+  border: 2px solid #d4c8b8;
+  box-shadow:
+    inset 0 0 20px rgba(139,119,90,0.04),
+    0 4px 20px rgba(0,0,0,0.04);
+}
+.sb-panel:hover {
+  border-color: rgba(124,58,237,0.3);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.05),
+    0 8px 32px rgba(124,58,237,0.08);
+}
+[data-theme="light"] .sb-panel:hover { border-color: rgba(124,58,237,0.25); }
+
+.panel-header {
+  padding: 12px 16px; font-size: 0.8rem; font-weight: 650;
+  color: var(--text-secondary); display: flex; align-items: center; gap: 8px;
+  border-bottom: 1px solid var(--border-color);
+  background: rgba(255,255,255,0.02);
+  letter-spacing: 0.02em; text-transform: uppercase; font-size: 0.72rem;
+}
+[data-theme="light"] .panel-header { background: rgba(0,0,0,0.015); }
 .panel-body { flex: 1; overflow: auto; padding: var(--space-md); }
-.code-panel-body { padding: 0; }
-.req-input :deep(.el-textarea__inner) { background: transparent; color: var(--text-primary); border: 1px solid var(--border-color); font-size: 0.9rem; resize: none; }
+
+/* AI 对话面板 — 素描纸感 */
+.panel-chat .panel-body {
+  background:
+    linear-gradient(rgba(255,255,255,0.01) 1px, transparent 1px);
+  background-size: 100% 28px;
+}
+.req-input :deep(.el-textarea__inner) {
+  background: rgba(255,255,255,0.03); color: var(--text-primary);
+  border: 1.5px dashed rgba(255,255,255,0.1); font-size: 0.9rem; resize: none;
+  border-radius: var(--radius-lg); line-height: 1.6; padding: var(--space-md);
+  transition: all 0.3s ease;
+  font-style: italic;
+}
+[data-theme="light"] .req-input :deep(.el-textarea__inner) {
+  background: rgba(0,0,0,0.01); border: 1.5px dashed #c8bda8;
+}
+.req-input :deep(.el-textarea__inner:focus) {
+  border-color: var(--accent-purple); border-style: solid;
+  box-shadow: 0 0 0 4px rgba(124,58,237,0.06);
+  font-style: normal;
+}
 .quick-prompts { margin-top: var(--space-md); }
-.qp-label { font-size: 0.78rem; color: var(--text-tertiary); }
-.qp-tag { cursor: pointer; margin: 3px; background: var(--bg-card-hover) !important; border-color: var(--border-color) !important; color: var(--text-secondary); transition: all var(--transition-fast); }
-.qp-tag:hover { border-color: var(--accent-purple) !important; color: var(--accent-purple-light); }
+.qp-label { font-size: 0.75rem; color: var(--text-tertiary); font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
+.qp-tag {
+  cursor: pointer; margin: 3px; font-size: 0.78rem;
+  background: rgba(255,255,255,0.03) !important; border: 1px solid rgba(255,255,255,0.08) !important;
+  color: var(--text-secondary); transition: all 0.25s ease;
+  border-radius: var(--radius-full);
+}
+.qp-tag:hover { border-color: var(--accent-purple) !important; color: var(--accent-purple-light); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(124,58,237,0.15); }
+
+/* 代码面板 — 暗色画布 */
+.code-panel-body { padding: 0; background: #161b22; }
+.code-panel-body :deep(.cm-editor) { background: #161b22; }
+
+/* 预览面板 — 画框 */
 .preview-body { display: flex; align-items: center; justify-content: center; flex-direction: column; }
-.preview-empty { text-align: center; color: var(--text-tertiary); }
-.preview-empty .el-icon { margin-bottom: var(--space-md); opacity: 0.3; }
-.preview-empty p { font-size: 0.9rem; }
-.panel-log { max-height: 120px; overflow-y: auto; padding: var(--space-sm) var(--space-md); background: var(--bg-secondary); border-top: 1px solid var(--border-color); }
-.panel-log pre { font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-tertiary); white-space: pre-wrap; margin: 0; }
-@media (max-width: 1024px) { .sb-panels { grid-template-columns: 1fr; height: auto; } .sb-panel { min-height: 300px; } }
+.preview-video {
+  max-width: 100%; max-height: 100%; border-radius: var(--radius-lg);
+  animation: scale-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  border: 2px solid rgba(255,255,255,0.06);
+}
+.preview-empty { text-align: center; color: var(--text-tertiary); animation: fade-in 0.5s ease both; }
+.preview-empty .el-icon { margin-bottom: var(--space-md); opacity: 0.15; }
+.preview-empty p { font-size: 0.9rem; font-style: italic; }
+.panel-log { max-height: 140px; overflow-y: auto; padding: var(--space-sm) var(--space-md); background: rgba(0,0,0,0.2); border-top: 1px solid var(--border-color); }
+.panel-log pre { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-tertiary); white-space: pre-wrap; margin: 0; line-height: 1.5; }
+
+@keyframes scale-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+@media (max-width: 1024px) {
+  .sb-panels { grid-template-columns: 1fr; height: auto; }
+  .sb-panel { min-height: 320px; }
+}
 </style>

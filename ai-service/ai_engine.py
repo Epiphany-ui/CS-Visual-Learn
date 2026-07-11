@@ -158,7 +158,18 @@ def get_cached_result(user_input: str) -> Optional[Dict]:
     if cache_file.exists():
         try:
             with open(cache_file, "r", encoding="utf-8") as f:
-                return json.load(f)
+                cached = json.load(f)
+            # 验证缓存的视频文件是否仍然存在
+            vp = cached.get("video_path", "")
+            if vp:
+                vp_stem = vp.replace("/videos/", "")
+                video_file = VIDEO_OUTPUT_SUBDIR / vp_stem
+                if video_file.exists():
+                    return cached
+                else:
+                    # 视频已删除，缓存失效
+                    cache_file.unlink(missing_ok=True)
+            return None
         except Exception:
             return None
     return None

@@ -50,4 +50,20 @@ onMounted(() => {
   z-index: 1;
   padding-top: var(--header-height);
 }
+
+/* 页面过渡动画 */
+.page-enter-active {
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.page-leave-active {
+  transition: all 0.2s cubic-bezier(0.4, 0, 1, 1);
+}
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(16px) scale(0.98);
+}
+.page-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
 </style>
