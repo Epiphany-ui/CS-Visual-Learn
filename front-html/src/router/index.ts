@@ -1,5 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import { ElMessage } from 'element-plus'
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -98,6 +99,7 @@ router.beforeEach((to) => {
   // 需要登录的页面 → 跳转登录页，携带目标地址
   if (to.meta.auth) {
     if (!userStore.isLoggedIn) {
+      ElMessage.warning('请先登录')
       return { name: 'login', query: { redirect: to.fullPath } }
     }
   }

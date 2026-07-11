@@ -1,7 +1,23 @@
 <script setup lang="ts">
+import { onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { useUserStore } from '@/stores/user'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
 import AnimatedBackground from '@/components/common/AnimatedBackground.vue'
+
+const userStore = useUserStore()
+const router = useRouter()
+
+onMounted(() => {
+  // 检查 localStorage 中是否残留过期 token，有则清理并跳转登录
+  if (localStorage.getItem('token') && !userStore.isLoggedIn) {
+    userStore.logout()
+    ElMessage.warning('请先登录')
+    router.replace('/login')
+  }
+})
 </script>
 
 <template>
