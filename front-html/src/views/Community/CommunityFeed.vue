@@ -53,7 +53,9 @@ function getThumbnailUrl(post: any): string {
 async function loadPosts() {
   loading.value = true
   try {
-    const res = await fetch(`/api/v1/gallery/list?sort=${sortBy.value}`)
+    // 按点赞/浏览时需要取全部数据后在客户端重排
+    const size = sortBy.value === 'time' ? 50 : 200
+    const res = await fetch(`/api/v1/gallery/list?sort=${sortBy.value}&size=${size}`)
     const data = await res.json()
     const list: any[] = data.data?.list || []
     const ids = list.map((w: any) => w.workId).filter(Boolean)
