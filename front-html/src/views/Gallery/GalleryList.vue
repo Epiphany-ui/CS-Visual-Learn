@@ -17,17 +17,16 @@ const activeTab = ref<'all' | 'my-works' | 'stars'>(
 )
 
 function getMyWorks(): string[] {
-  try { return JSON.parse(localStorage.getItem('cs:my-works') || '[]') }
-  catch { return [] }
+  try {
+    const u = localStorage.getItem('username') || 'anon'
+    return JSON.parse(localStorage.getItem(`cs:my-works:${u}`) || '[]')
+  } catch { return [] }
 }
 
 const videos = computed(() => {
   if (activeTab.value === 'stars') return starredVideos.value
   if (activeTab.value === 'my-works') {
-    // 优先使用服务端数据，fallback 到 localStorage
-    if (serverMyWorks.value.length > 0) return serverMyWorks.value
-    const works = getMyWorks()
-    return allVideos.value.filter(v => works.includes(v.filename))
+    return serverMyWorks.value  // 只用服务端数据（per-user）
   }
   return allVideos.value
 })
@@ -93,7 +92,8 @@ async function syncPendingTasks() {
   try {
     const pending: string[] = JSON.parse(localStorage.getItem('cs:pending-tasks') || '[]')
     if (!pending.length) return
-    const works: string[] = JSON.parse(localStorage.getItem('cs:my-works') || '[]')
+    const u = localStorage.getItem('username') || 'anon'
+    const works: string[] = JSON.parse(localStorage.getItem(`cs:my-works:${u}`) || '[]')
     let changed = false
     for (const tid of pending.slice(0, 10)) {
       try {
@@ -108,7 +108,8 @@ async function syncPendingTasks() {
       } catch { /* skip */ }
     }
     if (changed) {
-      localStorage.setItem('cs:my-works', JSON.stringify(works.slice(0, 50)))
+      const u = localStorage.getItem('username') || 'anon'
+      localStorage.setItem(`cs:my-works:${u}`, JSON.stringify(works.slice(0, 50)))
       // 重新加载全部列表以更新标题
       await loadAll()
     }

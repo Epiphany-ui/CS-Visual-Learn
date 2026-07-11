@@ -126,10 +126,11 @@ function onSSEEvent(evt: SSETaskEvent) {
     currentFilename.value = evt.video_path.replace('/videos/', '')
     // 加入"我的作品"（localStorage + 服务端双写）
     try {
-      const works = JSON.parse(localStorage.getItem('cs:my-works') || '[]')
+      const u = localStorage.getItem('username') || 'anon'
+      const works = JSON.parse(localStorage.getItem(`cs:my-works:${u}`) || '[]')
       if (!works.includes(currentFilename.value)) {
         works.unshift(currentFilename.value)
-        localStorage.setItem('cs:my-works', JSON.stringify(works.slice(0, 50)))
+        localStorage.setItem(`cs:my-works:${u}`, JSON.stringify(works.slice(0, 50)))
       }
       // 同步到服务端（跨设备持久化）
       const name = localStorage.getItem('username') || ''
@@ -222,12 +223,14 @@ function restoreTaskFromSession() {
 // --- 操作 ---
 function handleGenerate() {
   if (!requirement.value.trim()) return
-  startAsyncTask(() => generationApi.asyncGenerate(requirement.value.trim(), 3, renderQuality.value))
+  const uname = localStorage.getItem('username') || ''
+  startAsyncTask(() => generationApi.asyncGenerate(requirement.value.trim(), 3, renderQuality.value, uname))
 }
 
 function handleRender() {
   if (!code.value.trim()) { ElMessage.warning('请先输入或生成 Manim 代码'); return }
-  startAsyncTask(() => generationApi.asyncRender(code.value, renderQuality.value))
+  const uname = localStorage.getItem('username') || ''
+  startAsyncTask(() => generationApi.asyncRender(code.value, renderQuality.value, uname))
 }
 
 async function handleCancelTask() {
@@ -268,7 +271,7 @@ async function handleFixCode() {
 
 function openPublishDialog() {
   publishDesc.value = requirement.value.slice(0, 200)
-  publishToGallery.value = true
+  publishToGallery.value = false
   publishDialogVisible.value = true
 }
 

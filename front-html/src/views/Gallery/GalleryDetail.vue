@@ -15,6 +15,8 @@ const saved = ref(false)
 const videoTitle = ref('')
 const editingTitle = ref(false)
 const titleInput = ref('')
+const videoOwner = ref('')       // 视频所有者用户名
+const isOwner = ref(false)
 
 async function loadTitle() {
   try {
@@ -23,6 +25,21 @@ async function loadTitle() {
     const meta = items.find((v: any) => v.filename === filename)
     videoTitle.value = meta?.title || filename
     titleInput.value = videoTitle.value
+    // 检查所有权
+    videoOwner.value = meta?.username || meta?.created_by || ''
+    const curUser = localStorage.getItem('username') || ''
+    // 检查所有权：视频 username 匹配当前用户，或视频在服务端 user-works 中
+    if (curUser && videoOwner.value !== curUser) {
+      // 异步查询服务端是否在 user-works 中（用于"匿名"视频的认领）
+      videosApi.getMyWorks(curUser).then(res => {
+        const myFiles = (res.data.data?.items || []).map((v: any) => v.filename)
+        if (myFiles.includes(filename)) {
+          videoOwner.value = curUser
+          isOwner.value = true
+        }
+      }).catch(() => {})
+    }
+    isOwner.value = curUser && videoOwner.value === curUser
   } catch { videoTitle.value = filename }
 }
 
@@ -116,7 +133,7 @@ onMounted(() => { checkSaved(); loadTitle() })
       <el-button round :type="saved ? 'warning' : 'default'" @click="handleSave">
         <el-icon><StarFilled v-if="saved" /><Star v-else /></el-icon> {{ saved ? '已收藏' : '收藏' }}
       </el-button>
-      <el-button round type="danger" :loading="deleting" @click="handleDelete">
+      <el-button v-if="isOwner" round type="danger" :loading="deleting" @click="handleDelete">
         <el-icon><Delete /></el-icon> 删除
       </el-button>
     </div>

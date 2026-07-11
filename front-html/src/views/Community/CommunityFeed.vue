@@ -212,7 +212,7 @@ onMounted(async () => { await loadPosts(); preloadTopComments() })
             <span class="post-author-name" @click="router.push(`/user/${encodeURIComponent(post.authorName || '匿名用户')}`)">{{ post.authorName }}</span>
             <span class="post-time">{{ formatTime(post.time) }}</span>
           </div>
-          <button v-if="post.authorName === currentUser" class="post-del-btn" :disabled="deletingPost.has(post.id)" @click.stop="handleDeletePost(post)" title="删除作品">
+          <button v-if="post.authorName === currentUser || post.authorName === currentDisplayName" class="post-del-btn" :disabled="deletingPost.has(post.id)" @click.stop="handleDeletePost(post)" title="删除作品">
             <el-icon :size="14"><Delete /></el-icon>
           </button>
         </div>

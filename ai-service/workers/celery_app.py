@@ -89,7 +89,7 @@ def _make_render_callback(task_id: str):
 
 
 @celery_app.task(bind=True, max_retries=2)
-def render_code_task(self, code: str, quality: str = None):
+def render_code_task(self, code: str, quality: str = None, username: str = None):
     """异步渲染已有Manim代码"""
     task_id = self.request.id
     set_progress(task_id, state="STARTED", progress=0, message="任务已接收，准备渲染...")
@@ -104,7 +104,7 @@ def render_code_task(self, code: str, quality: str = None):
             fn = video_path.replace("/videos/", "") if video_path else ""
             if fn:
                 scene = extract_scene_class_name(code) or "Manim"
-                save_video_meta(fn, title=f"{scene} 渲染")
+                save_video_meta(fn, title=f"{scene} 渲染", username=username or "")
             set_progress(task_id, state="SUCCESS", progress=100,
                          message="渲染完成", video_path=video_path, log=log, code=code)
         else:
@@ -121,7 +121,7 @@ def render_code_task(self, code: str, quality: str = None):
 
 
 @celery_app.task(bind=True, max_retries=2)
-def generate_full_task(self, requirement: str, max_retry: int = 3, quality: str = None):
+def generate_full_task(self, requirement: str, max_retry: int = 3, quality: str = None, username: str = None):
     """异步完整生成流水线（需求→代码→渲染→修复）"""
     task_id = self.request.id
     set_progress(task_id, state="STARTED", progress=0, message="任务已接收，AI 正在生成代码...")
@@ -137,7 +137,7 @@ def generate_full_task(self, requirement: str, max_retry: int = 3, quality: str 
                 return {"success": False, "error": "cancelled"}
             fn = vp.replace("/videos/", "") if vp else ""
             if fn:
-                save_video_meta(fn, title=requirement[:80])
+                save_video_meta(fn, title=requirement[:80], username=username or "")
             set_progress(task_id, state="SUCCESS", progress=100,
                          message="生成完成", video_path=vp,
                          log=result.get("log", ""), code=code_str)

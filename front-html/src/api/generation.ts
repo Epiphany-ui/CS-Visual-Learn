@@ -41,19 +41,21 @@ export const generationApi = {
   },
 
   /** 异步全流程生成 */
-  asyncGenerate(requirement: string, maxRetry = 3, quality?: string) {
+  asyncGenerate(requirement: string, maxRetry = 3, quality?: string, username?: string) {
     return pythonClient.post<ApiResponse<{ task_id: string }>>('/api/async/generate', {
       requirement,
       max_retry: maxRetry,
       quality,
+      username: username || undefined,
     })
   },
 
   /** 异步渲染 */
-  asyncRender(code: string, quality?: string) {
+  asyncRender(code: string, quality?: string, username?: string) {
     return pythonClient.post<ApiResponse<{ task_id: string; warnings?: unknown[] }>>('/api/async/render', {
       code,
       quality,
+      username: username || undefined,
     })
   },
 

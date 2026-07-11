@@ -787,8 +787,13 @@ async def api_videos_list(gallery: bool = False, my_works: bool = False, usernam
         saved = get_gallery_filenames(username)
         videos = [v for v in videos if v.get("filename") in saved]
     if my_works and username:
+        # 优先用 Redis user-works set，fallback 到视频元数据 username 字段
         works = get_user_works(username)
-        videos = [v for v in videos if v.get("filename") in works]
+        if works:
+            videos = [v for v in videos if v.get("filename") in works]
+        else:
+            # user-works 为空时，直接按视频元数据的 username 过滤
+            videos = [v for v in videos if v.get("username") == username or v.get("created_by") == username]
     return success_response({"items": videos, "total": len(videos)})
 
 
@@ -859,12 +864,14 @@ class AsyncGenerateRequest(BaseModel):
     max_retry: int = 3
     context: Optional[str] = None
     quality: Optional[str] = None  # -ql(480p) / -qm(720p) / -qh(1080p)
+    username: Optional[str] = None  # 视频所有者（用于"我的作品"）
 
 
 class AsyncRenderRequest(BaseModel):
     """异步渲染请求"""
     code: str
     quality: Optional[str] = None
+    username: Optional[str] = None
 
 
 @app.post("/api/user/avatar")
@@ -903,7 +910,7 @@ async def api_async_generate(req: AsyncGenerateRequest):
     """
     try:
         from workers.celery_app import generate_full_task
-        task = generate_full_task.delay(req.requirement, req.max_retry, req.quality)
+        task = generate_full_task.delay(req.requirement, req.max_retry, req.quality, req.username)
         logger.info("[async] generate task dispatched: %s", task.id)
         return success_response({"task_id": task.id}, "任务已提交")
     except Exception as e:
@@ -924,7 +931,7 @@ async def api_async_render(req: AsyncRenderRequest):
 
     try:
         from workers.celery_app import render_code_task
-        task = render_code_task.delay(req.code, req.quality)
+        task = render_code_task.delay(req.code, req.quality, req.username)
         logger.info("[async] render task dispatched: %s", task.id)
         return success_response({
             "task_id": task.id,
