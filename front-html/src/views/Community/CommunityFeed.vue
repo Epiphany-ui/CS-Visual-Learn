@@ -215,7 +215,12 @@ function formatTime(t: string) {
   return d.toLocaleDateString('zh-CN')
 }
 
-onMounted(async () => { await loadPosts(); preloadTopComments() })
+async function refreshFeed() {
+  expandedComments.value = new Set()
+  await loadPosts()
+  preloadTopComments()
+}
+onMounted(refreshFeed)
 </script>
 
 <template>
@@ -223,7 +228,7 @@ onMounted(async () => { await loadPosts(); preloadTopComments() })
     <PageHeader title="社区广场" description="分享作品，交流心得，发现灵感" icon="User" />
 
     <div class="comm-toolbar">
-      <el-radio-group v-model="sortBy" size="small" @change="loadPosts">
+      <el-radio-group v-model="sortBy" size="small" @change="refreshFeed">
         <el-radio-button value="time">最新</el-radio-button>
         <el-radio-button value="likes">最多点赞</el-radio-button>
         <el-radio-button value="views">最多浏览</el-radio-button>

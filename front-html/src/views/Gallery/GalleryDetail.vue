@@ -26,6 +26,22 @@ const isOwner = ref(false)
 const showSource = ref(false)
 const sourceCode = ref('')
 
+// 创作者信息（从 Java 画廊接口直接拿，authorId 即 userId）
+const authorInfo = ref<{ userId: string | number; username: string; nickname: string; avatar: string; workId?: number }>({
+  userId: '', username: '', nickname: '', avatar: '', workId: undefined,
+})
+
+// 相关推荐
+interface RelatedItem {
+  id: number
+  title: string
+  cover?: string
+  authorName: string
+  authorId?: number
+  videoPath?: string
+}
+const relatedVideos = ref<RelatedItem[]>([])
+
 // ========== 加载数据 ==========
 async function loadTitle() {
   try {
@@ -46,6 +62,7 @@ async function loadTitle() {
       }).catch(() => {})
     }
     isOwner.value = !!curUser && videoOwner.value === curUser
+    isPublished.value = (meta as any)?.published === '1'
     // 模拟源码
     sourceCode.value = `# ${videoTitle.value}
 # Manim 动画源码示例
@@ -114,6 +131,10 @@ async function handleSave() {
 }
 
 function handleFork() {
+  // 把源码写入 sessionStorage，沙箱 onMounted 会读取
+  if (sourceCode.value) {
+    sessionStorage.setItem('cs:forked-code', sourceCode.value)
+  }
   router.push({ path: '/sandbox', query: { fork: filename, title: videoTitle.value } })
   ElMessage.success('已 Fork 到沙箱，开始你的二次创作吧！')
 }
@@ -132,6 +153,15 @@ async function handleConvertGif() {
 }
 
 const deleting = ref(false)
+const isPublished = ref(false)
+async function handleTogglePublic() {
+  try {
+    const res = await videosApi.togglePublic(filename)
+    isPublished.value = res.data.data?.published ?? false
+    ElMessage.success(isPublished.value ? '已设为公开' : '已设为私有')
+  } catch { ElMessage.error('操作失败') }
+}
+
 async function handleDelete() {
   try {
     await ElMessageBox.confirm('确定要删除该视频吗？此操作不可恢复。', '删除确认', {
@@ -147,20 +177,118 @@ async function handleDelete() {
   finally { deleting.value = false }
 }
 
-// 相关推荐（模拟数据）
-const relatedVideos = ref([
-  { title: '冒泡排序可视化', filename: 'bubble_sort.mp4', thumb: '' },
-  { title: '快速排序动画演示', filename: 'quick_sort.mp4', thumb: '' },
-  { title: '二叉树遍历', filename: 'tree_traversal.mp4', thumb: '' },
-])
+// ========== 从 Java 画廊接口加载作品信息（作者 + 推荐） ==========
+function extractFilename(path: string): string {
+  if (!path) return ''
+  // 取最后一段，去掉查询参数和扩展名，统一小写
+  const name = path.split('/').pop()?.split('?')[0] || ''
+  return name.replace(/\.[^.]+$/, '').toLowerCase()
+}
+
+async function loadWorkFromGallery() {
+  try {
+    const res = await fetch('/api/v1/gallery/list?sort=time&size=200')
+    const data = await res.json()
+    const list: any[] = data.data?.list || []
+    if (!list.length) return
+
+    const targetFn = extractFilename(filename)
+
+    // 1. 找到当前视频对应的作品，提取作者信息
+    const currentWork = list.find((item: any) => {
+      return extractFilename(item.videoPath) === targetFn
+    })
+    if (currentWork) {
+      authorInfo.value = {
+        userId: currentWork.authorId || '',
+        username: currentWork.authorName || '',
+        nickname: currentWork.authorName || '',
+        avatar: currentWork.authorAvatar || '',
+        workId: currentWork.workId,
+      }
+      videoOwner.value = currentWork.authorName || ''
+      // 判断是否是作者本人
+      const curUser = username.value
+      if (curUser && currentWork.authorName === curUser) {
+        isOwner.value = true
+      }
+
+      // 加载真实源码
+      if (currentWork.workId) {
+        try {
+          const detailRes = await fetch(`/api/v1/work/public/detail?workId=${currentWork.workId}`)
+          const detailData = await detailRes.json()
+          if (detailData.code === 200 && detailData.data?.manimCode) {
+            sourceCode.value = detailData.data.manimCode
+          }
+        } catch { /* 拿不到就保持默认模拟代码 */ }
+      }
+    }
+
+    // 2. 相关推荐
+    const authorId = authorInfo.value.userId
+    const notCurrent = (item: any) => extractFilename(item.videoPath) !== targetFn
+
+    // 同作者的最多取1条
+    const sameAuthor = list
+      .filter(notCurrent)
+      .filter(i => authorId && i.authorId === authorId)
+      .slice(0, 1)
+
+    // 热门补齐，排除同作者已选的，且尽量不同作者
+    const seenAuthors = new Set(sameAuthor.map(i => i.authorId))
+    const hotFill = list
+      .filter(notCurrent)
+      .filter(i => !sameAuthor.find(s => s.workId === i.workId))
+      .sort((a, b) => (b.likeCount || 0) - (a.likeCount || 0))
+      .filter(item => {
+        // 尽量多样化：同一个作者最多出现1次
+        if (seenAuthors.has(item.authorId)) return false
+        seenAuthors.add(item.authorId)
+        return true
+      })
+      .slice(0, 3 - sameAuthor.length)
+
+    relatedVideos.value = [...sameAuthor, ...hotFill].map((item: any) => ({
+      id: item.workId,
+      title: item.title,
+      cover: item.cover,
+      authorName: item.authorName || '匿名',
+      authorId: item.authorId,
+      videoPath: item.videoPath,
+    }))
+  } catch (e) {
+    console.warn('[gallery-detail] load from gallery failed', e)
+  }
+
+  // 兜底：画廊匹配不到时，用 username 查 Java 接口拿 userId
+  if (!authorInfo.value.userId && videoOwner.value) {
+    try {
+      const res = await fetch(`/api/v1/user/info-by-username?username=${encodeURIComponent(videoOwner.value)}`)
+      const data = await res.json()
+      if (data.code === 200 && data.data?.userId) {
+        authorInfo.value.userId = data.data.userId
+        authorInfo.value.nickname = data.data.nickname || videoOwner.value
+        authorInfo.value.avatar = data.data.avatar || ''
+      }
+    } catch { /* 查不到就算了，跳转时走 username 兜底 */ }
+  }
+}
 
 function goToUser() {
-  if (videoOwner.value) {
+  if (authorInfo.value.userId) {
+    router.push(`/user/${authorInfo.value.userId}`)
+  } else if (videoOwner.value) {
     router.push(`/user/${videoOwner.value}`)
   }
 }
 
-onMounted(() => { checkSaved(); loadTitle(); loadLikeStatus() })
+onMounted(async () => {
+  checkSaved()
+  await loadTitle()
+  loadWorkFromGallery()
+  loadLikeStatus()
+})
 </script>
 
 <template>
@@ -217,6 +345,9 @@ onMounted(() => { checkSaved(); loadTitle(); loadLikeStatus() })
               <el-icon><Download /></el-icon>
               <a :href="downloadUrl" download style="text-decoration:none;color:inherit">下载 MP4</a>
             </el-button>
+            <el-button v-if="isOwner" round @click="handleTogglePublic">
+              <el-icon><View /></el-icon> {{ isPublished ? '设为私有' : '设为公开' }}
+            </el-button>
             <el-button v-if="isOwner" round type="danger" :loading="deleting" @click="handleDelete">
               <el-icon><Delete /></el-icon> 删除
             </el-button>
@@ -251,9 +382,9 @@ onMounted(() => { checkSaved(); loadTitle(); loadLikeStatus() })
           <!-- 作者信息 -->
           <div class="author-card glass-card">
             <div class="author-header" @click="goToUser" style="cursor:pointer">
-              <AvatarIcon :name="videoOwner || 'anon'" :size="48" />
+              <AvatarIcon :name="authorInfo.nickname || videoOwner || 'anon'" :size="48" :avatar-url="authorInfo.avatar || ''" />
               <div class="author-info">
-                <div class="author-name">{{ videoOwner || '匿名创作者' }}</div>
+                <div class="author-name">{{ authorInfo.nickname || videoOwner || '匿名创作者' }}</div>
                 <div class="author-desc">创作者</div>
               </div>
             </div>
@@ -270,14 +401,21 @@ onMounted(() => { checkSaved(); loadTitle(); loadLikeStatus() })
             <div class="related-list">
               <div
                 v-for="v in relatedVideos"
-                :key="v.filename"
+                :key="v.id"
                 class="related-item"
-                @click="router.push(`/gallery/${v.filename}`)"
+                @click="v.videoPath && router.push(`/gallery/${v.videoPath.split('/').pop()}`)"
               >
                 <div class="related-thumb">
-                  <el-icon><VideoPlay /></el-icon>
+                  <img v-if="v.cover" :src="v.cover" class="related-thumb-img" />
+                  <el-icon v-else><VideoPlay /></el-icon>
                 </div>
-                <span>{{ v.title }}</span>
+                <div class="related-text">
+                  <div class="related-title">{{ v.title }}</div>
+                  <div class="related-author">{{ v.authorName }}</div>
+                </div>
+              </div>
+              <div v-if="relatedVideos.length === 0" class="related-empty">
+                暂无推荐作品
               </div>
             </div>
           </div>
@@ -411,15 +549,33 @@ onMounted(() => { checkSaved(); loadTitle(); loadLikeStatus() })
 }
 .related-item:hover { background: var(--bg-card-hover); color: var(--text-primary); }
 .related-thumb {
-  width: 40px;
-  height: 28px;
+  width: 56px;
+  height: 36px;
   background: var(--bg-secondary);
-  border-radius: 4px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-tertiary);
   flex-shrink: 0;
+  overflow: hidden;
+}
+.related-thumb-img { width: 100%; height: 100%; object-fit: cover; }
+.related-text { flex: 1; min-width: 0; }
+.related-title {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.related-author { font-size: 0.72rem; color: var(--text-tertiary); }
+.related-empty {
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 0.8rem;
+  padding: 16px 0;
 }
 
 @media (max-width: 900px) {

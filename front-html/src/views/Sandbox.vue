@@ -39,6 +39,7 @@ let _aiChanging = false   // 标记正在由 AI 修改代码（触发 typewriter
 let _progressTimer: ReturnType<typeof setInterval> | null = null
 let _progressTarget = 0
 let _taskCompleted = false // 防止 onerror 覆盖已完成的结果
+let _nextTaskTimer: ReturnType<typeof setTimeout> | null = null // 自动启动下一个任务的定时器
 
 // ========== Canvas Typewriter 画笔写入效果 ==========
 function onCanvasDone() {
@@ -384,21 +385,28 @@ function _connectTaskSSE(taskId: string) {
   })
 }
 
-// 队列中的任务完成后，自动启动下一个
+// 队列中的任务完成后，自动启动下一个（FIFO）
 function _onQueueTaskDone(taskId: string, success: boolean) {
   if (taskId === _activeTaskId) {
     onTaskDone(success)
   }
   disconnect()
 
-  // 找下一个排队的任务
-  const next = taskStore.pendingTasks[0]
+  // 清理之前的定时器
+  if (_nextTaskTimer) {
+    clearTimeout(_nextTaskTimer)
+    _nextTaskTimer = null
+  }
+
+  // 找下一个排队的任务（最早提交的）
+  const next = taskStore.nextPendingTask
   if (next) {
     // 延迟一下再启动，给用户感知
-    setTimeout(() => {
+    _nextTaskTimer = setTimeout(() => {
       _connectTaskSSE(next.taskId)
       generating.value = true
       startSmoothProgress(next.progress || 0)
+      _nextTaskTimer = null
     }, 500)
   }
 }
@@ -407,6 +415,11 @@ function _onQueueTaskDone(taskId: string, success: boolean) {
 function loadTaskFromQueue(taskId: string) {
   const task = taskStore.loadTaskResult(taskId)
   if (!task) return
+
+  // 重置状态
+  generating.value = false
+  savedToGallery.value = false
+  logOutput.value = ''
 
   if (task.code) {
     _aiChanging = true
@@ -419,6 +432,10 @@ function loadTaskFromQueue(taskId: string) {
     videoPath.value = task.videoPath
     videoUrl.value = `http://localhost:8000${task.videoPath}`
     currentFilename.value = task.videoPath.replace('/videos/', '')
+  } else {
+    videoPath.value = ''
+    videoUrl.value = ''
+    currentFilename.value = ''
   }
   progress.value = task.progress
   progressMsg.value = task.message
@@ -481,6 +498,10 @@ watch(
 onUnmounted(() => {
   disconnect()
   stopSmoothProgress()
+  if (_nextTaskTimer) {
+    clearTimeout(_nextTaskTimer)
+    _nextTaskTimer = null
+  }
   saveState()
 })
 </script>

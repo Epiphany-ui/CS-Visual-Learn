@@ -71,8 +71,26 @@ async function loadAll() {
       }
     }
 
+    // 1b. fallback: 无 authorId 时从社区 API 获取头像和昵称
+    if (!authorId && !/^\d+$/.test(param)) {
+      try {
+        const gRes = await fetch(`/api/v1/gallery/list?sort=time&size=100`)
+        if (gRes.ok) {
+          const gData = await gRes.json()
+          // 精确匹配或前缀匹配（登录名"李哲希爸爸" vs 昵称"李哲希的爸爸"）
+          const list = gData.data?.list || []
+          let userPost = list.find((p: any) => p.authorName === param)
+            || list.find((p: any) => p.authorName && param && p.authorName.includes(param))
+            || list.find((p: any) => param && p.authorName && param.includes(p.authorName.replace('的', '')))
+          if (userPost) {
+            displayName.value = userPost.authorName || param
+            avatarUrl.value = userPost.authorAvatar || ''
+          }
+        }
+      } catch { /* ignore */ }
+    }
+
     // 2. Fallback: 如果 Java 没有公开作品，尝试从 Python 后端按用户名查所有作品
-    // （用于查看用户本地生成但未发布的作品）
     if (works.value.length === 0) {
       const tryName = usernameRef.value || (!/^\d+$/.test(param) ? param : '')
       if (tryName) {

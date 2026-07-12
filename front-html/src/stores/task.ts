@@ -24,8 +24,11 @@ export const useTaskStore = defineStore('task', () => {
   // 当前运行中的任务（第一个 RUNNING 状态的）
   const runningTask = computed(() => queue.value.find(t => t.state === 'RUNNING') || null)
 
-  // 排队中的任务
-  const pendingTasks = computed(() => queue.value.filter(t => t.state === 'PENDING'))
+  // 排队中的任务（按提交时间正序：最早的在前）
+  const pendingTasks = computed(() => queue.value.filter(t => t.state === 'PENDING').reverse())
+
+  // 下一个要执行的任务（FIFO：最早提交的排队任务）
+  const nextPendingTask = computed(() => pendingTasks.value[0] || null)
 
   // 已完成的任务（成功 + 失败）
   const finishedTasks = computed(() =>
@@ -78,9 +81,9 @@ export const useTaskStore = defineStore('task', () => {
     _persist()
   }
 
-  // ========== 启动下一个排队任务 ==========
+  // ========== 启动下一个排队任务（FIFO）==========
   function _startNextTask() {
-    const next = pendingTasks.value[0]
+    const next = nextPendingTask.value
     if (next) {
       next.state = 'RUNNING'
       next.message = '准备中...'
@@ -134,12 +137,15 @@ export const useTaskStore = defineStore('task', () => {
       if (saved) {
         queue.value = JSON.parse(saved)
         // 恢复后，运行中的任务重置为排队（刷新后需要重新连接）
+        let changed = false
         queue.value.forEach(t => {
           if (t.state === 'RUNNING') {
             t.state = 'PENDING'
             t.message = '已暂停，点击继续'
+            changed = true
           }
         })
+        if (changed) _persist()
       } else {
         queue.value = []
       }
@@ -150,6 +156,7 @@ export const useTaskStore = defineStore('task', () => {
     queue,
     runningTask,
     pendingTasks,
+    nextPendingTask,
     finishedTasks,
     addTask,
     updateTaskProgress,

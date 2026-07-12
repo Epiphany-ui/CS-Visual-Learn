@@ -82,6 +82,21 @@ async function loadServerWorksCount() {
   } catch { /* ignore */ }
 }
 
+// 从 Java 后端加载作品总数（包含所有状态：草稿/发布/公开/私有）
+const javaWorkCount = ref(0)
+async function loadJavaWorkCount() {
+  if (!token.value) return
+  try {
+    const res = await fetch('/api/v1/user/home/data', {
+      headers: { 'Authorization': `Bearer ${token.value}` },
+    })
+    const data = await res.json()
+    if (data.code === 200 && data.data?.workCount != null) {
+      javaWorkCount.value = data.data.workCount
+    }
+  } catch { /* ignore */ }
+}
+
 // 同步 localStorage 的作品到服务端
 async function syncWorksToServer() {
   const name = username.value
@@ -167,6 +182,7 @@ onMounted(() => {
   myWorksCount.value = getMyWorksCount()
   loadStarsCount()
   loadServerWorksCount().then(() => syncWorksToServer())
+  loadJavaWorkCount()
   // 从 Java 后端拉取最新数据（覆盖本地），然后同步本地未同步的数据
   pullProfileFromBackend().then(() => syncExistingProfileToBackend())
 })
@@ -209,7 +225,7 @@ watch(username, (name) => {
 
     <div class="profile-grid">
       <RevealOnScroll v-for="(card, i) in [
-        { icon: 'PictureFilled', color: 'var(--accent-purple)', label: '我的作品', count: serverWorksCount.value || myWorksCount || 0, click: () => router.push('/gallery?tab=my-works') },
+        { icon: 'PictureFilled', color: 'var(--accent-purple)', label: '我的作品', count: javaWorkCount.value || serverWorksCount.value || myWorksCount || 0, click: () => router.push('/gallery?tab=my-works') },
         { icon: 'Star', color: 'var(--accent-orange)', label: '我的收藏', count: myStarsCount, click: () => router.push('/gallery?tab=stars') },
         { icon: 'Collection', color: 'var(--accent-cyan)', label: '词条贡献', count: 0, click: () => router.push('/wiki') },
         { icon: 'Clock', color: 'var(--accent-green)', label: '模板贡献', count: 0, click: () => router.push('/templates') },

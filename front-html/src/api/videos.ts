@@ -2,14 +2,27 @@ import { pythonClient } from './client'
 import type { ApiResponse } from '@/types/api'
 import type { VideoFile, VideoMetadata, FrameInfo } from '@/types/task'
 
-const VIDEO_BASE = 'http://localhost:8000'
+const VIDEO_BASE = import.meta.env.VITE_PYTHON_BASE || 'http://localhost:8000'
 
 export const videosApi = {
-  /** 获取视频列表。?gallery=true 时仅返回已收藏到画廊的视频 */
-  getList(gallery = false, username = '') {
+  /** 获取视频列表。?published=true 仅返回已发布；?gallery=true 仅返回收藏 */
+  getList(gallery = false, username = '', published = false) {
     const params: Record<string, any> = { _: Date.now() }
     if (gallery) { params.gallery = true; if (username) params.username = username }
+    if (published) params.published = true
     return pythonClient.get<ApiResponse<{ items: VideoFile[]; total: number }>>('/api/videos/list', { params })
+  },
+
+  /** 发布视频到画廊 */
+  publishVideo(filename: string, username?: string) {
+    return pythonClient.post<ApiResponse<{ filename: string; published: boolean }>>(`/api/videos/${filename}/publish`, null, {
+      params: username ? { username } : {},
+    })
+  },
+
+  /** 切换公开/私有 */
+  togglePublic(filename: string) {
+    return pythonClient.post<ApiResponse<{ filename: string; published: boolean }>>(`/api/videos/${filename}/toggle-public`)
   },
 
   /** Toggle 画廊收藏：已收藏则取消，未收藏则添加 */

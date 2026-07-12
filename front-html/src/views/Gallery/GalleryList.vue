@@ -44,7 +44,7 @@ function switchTab(tab: 'all' | 'my-works' | 'stars') {
 async function loadAll() {
   loading.value = true
   try {
-    const res = await videosApi.getList(false)  // all videos
+    const res = await videosApi.getList(false, '', true)  // 只显示已发布到画廊的公开视频
     allVideos.value = res.data.data?.items || []
   } finally { loading.value = false }
 }

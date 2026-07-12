@@ -105,6 +105,9 @@ function updateParam(paramName: string, newValue: any) {
   const param = params.value.find(p => p.name === paramName)
   if (!param) return
 
+  // 防护：数字输入清空时 newValue 为 undefined，不更新
+  if ((param.type === 'integer' || param.type === 'float') && newValue === undefined) return
+
   param.value = newValue
 
   // 格式化新值
@@ -112,16 +115,22 @@ function updateParam(paramName: string, newValue: any) {
   if (param.type === 'boolean') {
     strValue = newValue ? 'True' : 'False'
   } else if (param.type === 'string' || param.type === 'color') {
-    strValue = `'${newValue}'`
+    // 转义字符串中的单引号，避免破坏 Python 语法
+    const escaped = String(newValue).replace(/'/g, "\\'")
+    strValue = `'${escaped}'`
+  } else if (param.type === 'float') {
+    // 浮点数限制精度，避免超长小数写入代码
+    strValue = Number(newValue).toFixed(3).replace(/\.?0+$/, '')
   } else {
     strValue = String(newValue)
   }
 
-  // 替换代码中的对应行
+  // 替换代码中的对应行（变量名做正则转义，防止特殊字符注入）
   const lines = props.code.split('\n')
   let updated = false
+  const escapedName = paramName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   for (let i = 0; i < lines.length; i++) {
-    const regex = new RegExp(`^(\\s*)${paramName}\\s*=\\s*.+$`)
+    const regex = new RegExp(`^(\\s*)${escapedName}\\s*=\\s*.+$`)
     if (regex.test(lines[i])) {
       const indent = lines[i].match(/^\s*/)?.[0] || ''
       const comment = lines[i].match(/#.+$/)?.[0] || ''

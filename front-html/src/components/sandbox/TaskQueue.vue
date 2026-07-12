@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useTaskStore } from '@/stores/task'
+import { useTaskStore, type QueueTask } from '@/stores/task'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const emit = defineEmits<{
   (e: 'load-task', taskId: string): void
-  (e: 'cancel-task', taskId: string): void
 }>()
 
 const taskStore = useTaskStore()
@@ -19,7 +18,7 @@ function formatTime(ts: number): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-function handleLoad(task: any) {
+function handleLoad(task: QueueTask) {
   if (task.state === 'SUCCESS') {
     emit('load-task', task.taskId)
   } else {
