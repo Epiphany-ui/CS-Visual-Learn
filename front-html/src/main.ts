@@ -8,6 +8,8 @@ import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import App from './App.vue'
 import router from './router'
 import { useAppStore } from './stores/app'
+import { vRipple } from './directives/ripple'
+import { vTilt } from './directives/tilt'
 
 import './styles/global.scss'
 import './styles/transitions.css'
@@ -18,6 +20,10 @@ const app = createApp(App)
 for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
   app.component(key, component)
 }
+
+// 全局指令
+app.directive('ripple', vRipple)
+app.directive('tilt', vTilt)
 
 app.use(createPinia())
 app.use(router)

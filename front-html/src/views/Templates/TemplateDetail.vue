@@ -4,11 +4,13 @@ import { useRoute, useRouter } from 'vue-router'
 import { templatesApi } from '@/api/templates'
 import { generationApi } from '@/api/generation'
 import { useSSE } from '@/composables/useSSE'
+import { useCurrentUser } from '@/composables/useCurrentUser'
 import type { TemplateDetail } from '@/types/template'
 import { ElMessage } from 'element-plus'
 
 const route = useRoute()
 const router = useRouter()
+const { username } = useCurrentUser()
 const { connect, disconnect } = useSSE()
 const template = ref<TemplateDetail | null>(null)
 const renderQuality = ref(localStorage.getItem('cs:render-quality') || '-qm')
@@ -64,7 +66,7 @@ async function handleGenerate() {
   generating.value = true
   startTplProgress()
   try {
-    const res = await generationApi.asyncTemplateRender(template.value.id, formParams, renderQuality.value)
+    const res = await generationApi.asyncTemplateRender(template.value.id, formParams, renderQuality.value, username.value)
     const taskId = res.data.data?.task_id
     if (taskId) {
       connect(taskId, (data: any) => {

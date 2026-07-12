@@ -179,29 +179,33 @@ VIDEO_META_PREFIX = "cs:video"  # Redis Hash: 视频元数据 {filename} → {ti
 
 
 def save_video_meta(filename: str, title: str = "", username: str = ""):
-    """保存视频元数据（标题、创建时间、发布者）"""
+    """保存视频元数据（标题、创建时间、发布者）
+    永久持久化，不设 TTL，避免用户作品数据意外过期丢失。
+    """
     try:
         r = _get_redis()
         key = f"{VIDEO_META_PREFIX}:{filename}"
         r.hset(key, "title", title or filename)
         r.hset(key, "created_at", datetime.now().isoformat())
         r.hset(key, "username", username or "匿名")
-        r.expire(key, 86400 * 30)  # 30 天过期
+        # 永久存储，不再设置 30 天 TTL
         # 同步加入用户作品列表（服务端持久化）
         if username and username != "匿名":
             r.sadd(f"{VIDEO_META_PREFIX}:user-works:{username}", filename)
-            r.expire(f"{VIDEO_META_PREFIX}:user-works:{username}", 86400 * 90)
+            # 用户作品列表永久存储，不再设置 90 天 TTL
         _maybe_bgsave()
     except Exception:
         pass
 
 
 def add_to_user_works(username: str, filename: str) -> bool:
-    """将视频加入用户的作品列表（服务端持久化，跨浏览器/设备同步）"""
+    """将视频加入用户的作品列表（服务端持久化，跨浏览器/设备同步）
+    永久存储，不设 TTL。
+    """
     try:
         r = _get_redis()
         r.sadd(f"{VIDEO_META_PREFIX}:user-works:{username}", filename)
-        r.expire(f"{VIDEO_META_PREFIX}:user-works:{username}", 86400 * 90)
+        # 永久存储，不再设置 90 天 TTL
         _maybe_bgsave()
         return True
     except Exception:

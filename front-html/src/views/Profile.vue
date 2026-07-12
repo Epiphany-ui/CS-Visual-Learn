@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import RevealOnScroll from '@/components/common/RevealOnScroll.vue'
 import { videosApi } from '@/api/videos'
 import AvatarIcon from '@/components/common/AvatarIcon.vue'
+import CountNumber from '@/components/common/CountNumber.vue'
 import { useCurrentUser } from '@/composables/useCurrentUser'
 
 const userStore = useUserStore()
@@ -75,8 +76,9 @@ async function loadServerWorksCount() {
   const name = username.value
   if (!name) return
   try {
-    const res = await videosApi.getMyWorks(name)
-    serverWorksCount.value = res.data.data?.total || 0
+    const r = await fetch(`/api/videos/list?my_works=true&username=${encodeURIComponent(name)}`)
+    const d = await r.json()
+    serverWorksCount.value = d.data?.total || 0
   } catch { /* ignore */ }
 }
 
@@ -168,6 +170,10 @@ onMounted(() => {
   // 从 Java 后端拉取最新数据（覆盖本地），然后同步本地未同步的数据
   pullProfileFromBackend().then(() => syncExistingProfileToBackend())
 })
+// username 异步初始化时自动重试
+watch(username, (name) => {
+  if (name) loadServerWorksCount()
+})
 </script>
 
 <template>
@@ -197,23 +203,23 @@ onMounted(() => {
         <p v-else style="cursor:pointer;margin-top:4px;color:var(--text-secondary);font-size:0.85rem" @click="editingBio = true">
           {{ bio || '点击添加个人简介...' }} <el-icon :size="12"><EditPen /></el-icon>
         </p>
-        <el-button type="primary" round @click="router.push('/sandbox')"><el-icon><EditPen /></el-icon> 开始创作</el-button>
+        <el-button type="primary" round v-ripple @click="router.push('/sandbox')"><el-icon><EditPen /></el-icon> 开始创作</el-button>
       </div>
     </RevealOnScroll>
 
     <div class="profile-grid">
       <RevealOnScroll v-for="(card, i) in [
-        { icon: 'PictureFilled', color: 'var(--accent-purple)', label: '我的作品', count: serverWorksCount.value || myWorksCount, click: () => router.push('/gallery?tab=my-works') },
+        { icon: 'PictureFilled', color: 'var(--accent-purple)', label: '我的作品', count: serverWorksCount.value || myWorksCount || 0, click: () => router.push('/gallery?tab=my-works') },
         { icon: 'Star', color: 'var(--accent-orange)', label: '我的收藏', count: myStarsCount, click: () => router.push('/gallery?tab=stars') },
         { icon: 'Collection', color: 'var(--accent-cyan)', label: '词条贡献', count: 0, click: () => router.push('/wiki') },
         { icon: 'Clock', color: 'var(--accent-green)', label: '模板贡献', count: 0, click: () => router.push('/templates') },
       ]" :key="card.label" :delay="i * 100">
-        <div class="pf-card glass-card" @click="card.click()">
+        <div class="pf-card glass-card" v-tilt @click="card.click()">
           <el-icon :size="32" :color="card.color">
             <component :is="card.icon" />
           </el-icon>
           <h4>{{ card.label }}</h4>
-          <span class="count">{{ card.count }}</span>
+          <CountNumber class="count" :value="card.count" :duration="1200" />
         </div>
       </RevealOnScroll>
     </div>

@@ -71,7 +71,7 @@ function scrollToExplore() {
           >
             <template #prefix><el-icon><Search /></el-icon></template>
             <template #suffix>
-              <el-button type="primary" size="large" @click="handleGenerate" round class="hero-btn">
+              <el-button type="primary" size="large" @click="handleGenerate" round class="hero-btn" v-ripple>
                 <el-icon><MagicStick /></el-icon> 生成
               </el-button>
             </template>
@@ -106,7 +106,7 @@ function scrollToExplore() {
       </RevealOnScroll>
       <div class="category-grid">
         <RevealOnScroll v-for="(cat, i) in categories" :key="cat.name" :delay="i * 80">
-          <div class="category-card glass-card" @click="router.push(cat.path)">
+          <div class="category-card glass-card" v-tilt @click="router.push(cat.path)">
             <div class="cat-icon" :style="{ color: cat.color, background: cat.color + '15', boxShadow: '0 4px 20px ' + cat.color + '25' }">
               <el-icon :size="28"><component :is="cat.icon" /></el-icon>
             </div>

@@ -13,6 +13,12 @@ const props = withDefaults(defineProps<{
   bounce?: boolean
   /** 模糊渐清 */
   blur?: boolean
+  /** 缩放进入 */
+  scale?: boolean
+  /** 位移距离（px） */
+  distance?: number
+  /** 动画时长（ms） */
+  duration?: number
 }>(), {
   threshold: 0.12,
   rootMargin: '0px 0px -30px 0px',
@@ -21,6 +27,9 @@ const props = withDefaults(defineProps<{
   direction: 'up',
   bounce: false,
   blur: false,
+  scale: false,
+  distance: 40,
+  duration: 700,
 })
 
 const el = ref<HTMLElement | null>(null)
@@ -50,8 +59,13 @@ const { stop } = useIntersectionObserver(
       dirClass,
       { 'reveal-bounce': bounce },
       { 'reveal-blur': blur },
+      { 'reveal-scale': scale },
       { 'is-visible': visible },
     ]"
+    :style="{
+      '--reveal-distance': `${distance}px`,
+      '--reveal-duration': `${duration}ms`,
+    }"
   >
     <slot />
   </div>
@@ -60,40 +74,60 @@ const { stop } = useIntersectionObserver(
 <style scoped>
 .reveal-on-scroll {
   opacity: 0;
-  transition: all 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  transition:
+    opacity var(--reveal-duration) cubic-bezier(0.16, 1, 0.3, 1),
+    transform var(--reveal-duration) cubic-bezier(0.16, 1, 0.3, 1),
+    filter var(--reveal-duration) cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform, filter;
 }
-.reveal-on-scroll.reveal-blur {
-  filter: blur(8px);
-}
+
 .reveal-on-scroll.is-visible {
   opacity: 1;
+}
+
+/* 模糊渐清 */
+.reveal-on-scroll.reveal-blur {
+  filter: blur(12px);
 }
 .reveal-on-scroll.reveal-blur.is-visible {
   filter: blur(0);
 }
 
+/* 缩放进入 */
+.reveal-on-scroll.reveal-scale {
+  transform: scale(0.92);
+}
+.reveal-on-scroll.reveal-scale.is-visible {
+  transform: scale(1);
+}
+
 /* 方向位移 */
-.reveal-up { transform: translateY(40px); }
+.reveal-up { transform: translateY(var(--reveal-distance)); }
 .reveal-up.is-visible { transform: translateY(0); }
 
-.reveal-down { transform: translateY(-40px); }
+.reveal-down { transform: translateY(calc(var(--reveal-distance) * -1)); }
 .reveal-down.is-visible { transform: translateY(0); }
 
-.reveal-left { transform: translateX(-60px); }
+.reveal-left { transform: translateX(calc(var(--reveal-distance) * -1.5)); }
 .reveal-left.is-visible { transform: translateX(0); }
 
-.reveal-right { transform: translateX(60px); }
+.reveal-right { transform: translateX(calc(var(--reveal-distance) * 1.5)); }
 .reveal-right.is-visible { transform: translateX(0); }
 
 .reveal-none { transform: none; }
 
 /* 弹性弹入 */
 .reveal-bounce {
-  transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.reveal-bounce.is-visible {
-  transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1) !important;
 }
 
-/* 延迟 */
+/* 减少动效降级 */
+@media (prefers-reduced-motion: reduce) {
+  .reveal-on-scroll {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+    transition: none !important;
+  }
+}
 </style>

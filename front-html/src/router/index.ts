@@ -78,7 +78,7 @@ const router = createRouter({
       meta: { title: '个人中心', auth: true },
     },
     {
-      path: '/user/:username',
+      path: '/user/:userId',
       name: 'user-profile',
       component: () => import('@/views/UserProfile.vue'),
       meta: { title: '用户主页' },

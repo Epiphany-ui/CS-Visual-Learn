@@ -135,14 +135,15 @@ async def startup_event():
         import redis as _redis_lib
         r = _redis_lib.Redis.from_url(settings.redis_url, decode_responses=True, socket_connect_timeout=3)
         _project_dir = str(Path(__file__).resolve().parent)
-        r.config_set("dir", _project_dir)
-        r.config_set("stop-writes-on-bgsave-error", "no")
-        r.config_set("save", "")  # Windows 上禁用自动 BGSAVE（fork 会断连 Celery），改为手动触发
-        try:
-            r.config_rewrite()  # 持久化到 redis.conf，重启后生效
-        except Exception:
-            pass
-        logger.info("[startup] Redis 配置已自动修复并持久化 (dir=%s)", _project_dir)
+        current_dir = r.config_get("dir").get("dir", "")
+        if current_dir != _project_dir:
+            logger.warning("[startup] Redis dir 不正确 (当前=%s, 期望=%s)，已自动修正", current_dir, _project_dir)
+            r.config_set("dir", _project_dir)
+            r.config_set("stop-writes-on-bgsave-error", "no")
+            r.config_set("save", "")  # Windows 上禁用自动 BGSAVE（fork 会断连 Celery），改为手动触发
+            # 立即保存，确保 dump.rdb 在正确位置
+            r.save()
+        logger.info("[startup] Redis 配置就绪 (dir=%s, dump.rdb=%s)", _project_dir, _project_dir + "/dump.rdb")
     except Exception as _e:
         logger.warning("[startup] 无法自动配置 Redis: %s（如 Redis 未安装请忽略）", _e)
 
@@ -904,6 +905,7 @@ class AsyncTemplateRequest(BaseModel):
     template_id: str
     params: dict = {}
     quality: Optional[str] = None
+    username: Optional[str] = None
 
 
 @app.post("/api/async/generate")
@@ -953,7 +955,7 @@ async def api_async_template_render(req: AsyncTemplateRequest):
     """
     try:
         from workers.celery_app import render_template_task
-        task = render_template_task.delay(req.template_id, req.params, req.quality)
+        task = render_template_task.delay(req.template_id, req.params, req.quality, req.username)
         logger.info("[async] template task dispatched: %s (template=%s)", task.id, req.template_id)
         return success_response({"task_id": task.id}, "模板渲染任务已提交")
     except Exception as e:
@@ -1140,6 +1142,21 @@ async def api_increment_view(work_id: int):
     return success_response({"count": count})
 
 
+@app.get("/api/community/comments/batch")
+async def api_get_comments_batch(ids: str = "", limit: int = 3):
+    """批量获取多个帖子的前 N 条评论 ?ids=1,2,3&limit=3"""
+    try:
+        work_ids = [int(x) for x in ids.split(",") if x.strip()]
+        result = {}
+        for wid in work_ids:
+            comments = get_comments(wid, limit=limit, sort_by="likes")
+            total = get_comment_count(wid)
+            result[str(wid)] = {"comments": comments, "total": total}
+        return success_response({"posts": result})
+    except Exception:
+        return error_response("参数格式错误")
+
+
 @app.get("/api/community/comments/{work_id}")
 async def api_get_comments(work_id: int, limit: int = 3, sort: str = "likes"):
     """获取评论列表"""
@@ -1149,13 +1166,13 @@ async def api_get_comments(work_id: int, limit: int = 3, sort: str = "likes"):
 
 
 @app.post("/api/community/comments/{work_id}")
-async def api_add_comment(work_id: int, username: str = "", text: str = "", avatar: str = ""):
+async def api_add_comment(work_id: int, username: str = "", text: str = "", avatar: str = "", user_id: str = ""):
     """发表评论"""
     if not username or not text:
         return error_response("用户名和评论内容不能为空")
     if len(text) > 500:
         return error_response("评论不能超过500字")
-    comment = add_comment(work_id, username, text, avatar)
+    comment = add_comment(work_id, username, text, avatar, user_id)
     return success_response({"comment": comment}, "评论发表成功")
 
 

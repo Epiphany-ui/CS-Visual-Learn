@@ -57,7 +57,9 @@ def check_user_likes(work_ids: List[int], username: str) -> Dict[int, bool]:
 def increment_view(work_id: int) -> int:
     """递增浏览量，返回最新值"""
     r = _get_redis()
-    return r.incr(f"cs:work_views:{work_id}")
+    val = r.incr(f"cs:work_views:{work_id}")
+    _maybe_bgsave()
+    return val
 
 
 def get_view_counts(work_ids: List[int]) -> Dict[int, int]:
@@ -72,7 +74,7 @@ def get_view_counts(work_ids: List[int]) -> Dict[int, int]:
 
 # ==================== 评论 ====================
 
-def add_comment(work_id: int, username: str, text: str, avatar: str = "") -> dict:
+def add_comment(work_id: int, username: str, text: str, avatar: str = "", user_id: str = "") -> dict:
     """添加评论，返回评论对象"""
     r = _get_redis()
     comment = {
@@ -82,6 +84,7 @@ def add_comment(work_id: int, username: str, text: str, avatar: str = "") -> dic
         "text": text.strip(),
         "likes": 0,
         "avatar": avatar or "",
+        "userId": user_id or "",
     }
     # 用 sorted set 存储，score = 点赞数，方便按热度排序
     r.zadd(f"cs:comments:{work_id}", {json.dumps(comment, ensure_ascii=False): 0})

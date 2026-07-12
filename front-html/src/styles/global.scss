@@ -100,27 +100,43 @@ body {
 
 /* 增强玻璃态卡片 */
 .glass-card {
+  position: relative;
   background: var(--bg-card);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  transition: all 0.25s ease;
-}
-
-/* 玻璃态卡片 */
-.glass-card {
-  background: var(--bg-card);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  transition: all var(--transition-base);
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
 }
 .glass-card:hover {
   background: var(--bg-card-hover);
-  border-color: var(--border-color-light);
-  box-shadow: var(--shadow-md);
+  border-color: rgba(124, 58, 237, 0.5);
+  transform: translateY(-4px);
+  box-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(124, 58, 237, 0.2),
+    0 0 40px rgba(124, 58, 237, 0.15);
+}
+/* 卡片顶部渐变高光条 */
+.glass-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(124, 58, 237, 0.5) 30%,
+    rgba(59, 130, 246, 0.5) 60%,
+    transparent 100%);
+  opacity: 0;
+  transition: opacity var(--transition-base);
+  pointer-events: none;
+}
+.glass-card:hover::before {
+  opacity: 1;
 }
 
 /* 页面容器 */
@@ -290,4 +306,151 @@ body {
 .monaco-editor {
   border-radius: var(--radius-md);
   overflow: hidden;
+}
+
+/* ==================== 细节美化 ==================== */
+
+/* 文字选中颜色 */
+::selection {
+  background: rgba(124, 58, 237, 0.35);
+  color: var(--text-primary);
+}
+::-moz-selection {
+  background: rgba(124, 58, 237, 0.35);
+  color: var(--text-primary);
+}
+
+/* 输入框聚焦发光 */
+.el-input__wrapper.is-focus,
+.el-textarea__inner:focus {
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.15) !important;
+  border-color: var(--accent-purple) !important;
+}
+
+/* 按钮渐变发光 */
+.el-button--primary {
+  position: relative;
+  overflow: hidden;
+}
+.el-button--primary::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.1), transparent 50%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+.el-button--primary:hover::after {
+  opacity: 1;
+}
+
+/* 渐变标签 */
+.tag-gradient {
+  background: var(--gradient-primary) !important;
+  border: none !important;
+  color: white !important;
+  font-weight: 500;
+}
+
+/* ==================== 边框流光动画 ==================== */
+.glow-border {
+  position: relative;
+  isolation: isolate;
+}
+.glow-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(
+    from 0deg,
+    var(--accent-purple),
+    var(--accent-blue),
+    var(--accent-cyan),
+    var(--accent-purple)
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: border-spin 4s linear infinite;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: 1;
+}
+.glow-border:hover::before {
+  opacity: 1;
+}
+@keyframes border-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 常驻流光（不悬停也显示） */
+.glow-border--always::before {
+  opacity: 0.6;
+}
+.glow-border--always:hover::before {
+  opacity: 1;
+}
+
+/* ==================== Glitch 故障文字 ==================== */
+.glitch-text {
+  position: relative;
+  display: inline-block;
+}
+.glitch-text::before,
+.glitch-text::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.glitch-text::before {
+  color: #ff00c8;
+  animation: glitch-anim 5s infinite linear alternate-reverse;
+  clip-path: polygon(0 0, 100% 0, 100% 45%, 0 45%);
+  opacity: 0;
+}
+.glitch-text::after {
+  color: #00fff9;
+  animation: glitch-anim2 5s infinite linear alternate-reverse;
+  clip-path: polygon(0 55%, 100% 55%, 100% 100%, 0 100%);
+  opacity: 0;
+}
+.glitch-text:hover::before,
+.glitch-text:hover::after {
+  opacity: 0.7;
+}
+
+@keyframes glitch-anim {
+  0%, 90%, 100% { transform: translate(0); opacity: 0; }
+  92% { transform: translate(-2px, 1px); opacity: 0.7; }
+  94% { transform: translate(2px, -1px); opacity: 0.7; }
+  96% { transform: translate(-1px, -1px); opacity: 0.7; }
+  98% { transform: translate(1px, 1px); opacity: 0.7; }
+}
+@keyframes glitch-anim2 {
+  0%, 90%, 100% { transform: translate(0); opacity: 0; }
+  91% { transform: translate(2px, -1px); opacity: 0.7; }
+  93% { transform: translate(-2px, 1px); opacity: 0.7; }
+  95% { transform: translate(1px, 1px); opacity: 0.7; }
+  97% { transform: translate(-1px, -1px); opacity: 0.7; }
+}
+
+/* 减少动效降级（全局） */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

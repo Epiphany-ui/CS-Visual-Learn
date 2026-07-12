@@ -120,6 +120,21 @@ public class WorkController {
 
     // ==================== 7.7 创作者主页 ====================
 
+    @Operation(summary = "根据用户名获取用户公开信息")
+    @GetMapping("/user/info-by-username")
+    public Result<Map<String, Object>> getUserInfoByUsername(@RequestParam("username") String username) {
+        User user = userService.findByUsername(username);
+        if (user == null) throw new BusinessException("用户不存在");
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("userId", user.getId());
+        data.put("username", user.getUsername());
+        data.put("nickname", user.getNickname());
+        data.put("avatar", user.getAvatar());
+        data.put("intro", user.getIntro());
+        return Result.success(data);
+    }
+
     @Operation(summary = "获取创作者主页数据")
     @GetMapping("/user/author/home")
     public Result<Map<String, Object>> getAuthorHome(@RequestParam("authorId") Integer authorId) {
@@ -134,6 +149,7 @@ public class WorkController {
         Map<String, Object> data = new HashMap<>();
         Map<String, Object> authorInfo = new HashMap<>();
         authorInfo.put("userId", author.getId());
+        authorInfo.put("username", author.getUsername());
         authorInfo.put("nickname", author.getNickname());
         authorInfo.put("avatar", author.getAvatar());
         authorInfo.put("intro", author.getIntro());

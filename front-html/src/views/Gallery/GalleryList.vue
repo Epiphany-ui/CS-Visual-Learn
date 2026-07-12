@@ -33,7 +33,7 @@ const videos = computed(() => {
   return allVideos.value
 })
 
-const myWorksCount = computed(() => getMyWorks().length)
+const myWorksCount = computed(() => serverMyWorks.value.length)
 const starsCount = computed(() => starredVideos.value.length)
 
 function switchTab(tab: 'all' | 'my-works' | 'stars') {
@@ -59,15 +59,12 @@ async function loadStars() {
 // 从服务端加载"我的作品"列表（跨设备同步，不依赖 localStorage）
 const serverMyWorks = ref<VideoFile[]>([])
 async function loadMyWorksFromServer() {
-  if (!username.value) return
+  const name = username.value
+  if (!name) return
   try {
-    const res = await videosApi.getMyWorks(username.value)
-    serverMyWorks.value = res.data.data?.items || []
-    // 降级：合并 localStorage 中可能有但服务端还没有的
-    const local = getMyWorks()
-    if (local.length > 0) {
-      await videosApi.syncMyWorks(username.value, local).catch(() => {})
-    }
+    const r = await fetch(`/api/videos/list?my_works=true&username=${encodeURIComponent(name)}`)
+    const d = await r.json()
+    serverMyWorks.value = d.data?.items || []
   } catch { /* ignore */ }
 }
 
@@ -152,7 +149,7 @@ watch(activeTab, (tab) => {
     </div>
 
     <div class="gallery-grid" v-loading="loading">
-      <div v-for="v in sortedVideos" :key="v.filename" class="g-card glass-card" @click="router.push(`/gallery/${v.filename}`)">
+      <div v-for="v in sortedVideos" :key="v.filename" class="g-card glass-card" v-tilt @click="router.push(`/gallery/${v.filename}`)">
         <div class="g-thumb">
           <img :src="(v as any).poster || videosApi.getThumbnailUrl(v.filename)"
                loading="lazy"

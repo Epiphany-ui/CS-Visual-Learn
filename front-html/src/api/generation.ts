@@ -60,11 +60,12 @@ export const generationApi = {
   },
 
   /** 异步模板渲染 */
-  asyncTemplateRender(templateId: string, params: Record<string, unknown>, quality?: string) {
+  asyncTemplateRender(templateId: string, params: Record<string, unknown>, quality?: string, username?: string) {
     return pythonClient.post<ApiResponse<{ task_id: string }>>('/api/async/template-render', {
       template_id: templateId,
       params,
       quality,
+      username: username || undefined,
     })
   },
 }

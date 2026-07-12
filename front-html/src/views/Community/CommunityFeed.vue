@@ -9,7 +9,7 @@ import { communityApi, type Comment } from '@/api/community'
 import { useCurrentUser } from '@/composables/useCurrentUser'
 
 const router = useRouter()
-const { username: currentUser, displayName: currentDisplayName, avatar: currentAvatar, token, isLoggedIn } = useCurrentUser()
+const { username: currentUser, userId: currentUserId, displayName: currentDisplayName, avatar: currentAvatar, token, isLoggedIn } = useCurrentUser()
 const posts = ref<any[]>([])
 const deletingPost = ref<Set<number>>(new Set())
 const forkingPost = ref<Set<number>>(new Set())
@@ -160,7 +160,7 @@ async function submitComment(postId: number) {
   const reply = replyTo[postId]
   const displayText = reply ? `回复 @${reply.name}：${text}` : text
   try {
-    await communityApi.addComment(postId, currentDisplayName.value || currentUser.value, displayText, currentAvatar.value)
+    await communityApi.addComment(postId, currentDisplayName.value || currentUser.value, displayText, currentAvatar.value, String(currentUserId.value || ''))
     commentInputs[postId] = ''
     replyTo[postId] = null
     loadComments(postId)
@@ -175,17 +175,21 @@ async function handleCommentLike(postId: number, commentId: string) {
   } catch { /* ignore */ }
 }
 
-// 初始加载评论预览
+// 批量预加载前 3 条评论（一次请求，不发 N 次）
 async function preloadTopComments() {
-  for (const post of posts.value) {
-    if (post.id) {
-      try {
-        const res = await communityApi.getComments(post.id, 3)
-        post._comments = res.data.data?.comments || []
-        post._commentTotal = res.data.data?.total || 0
-      } catch { /* ignore */ }
+  const ids = posts.value.map(p => p.id).filter(Boolean)
+  if (!ids.length) return
+  try {
+    const res = await communityApi.getCommentsBatch(ids, 3)
+    const data = res.data.data?.posts || {}
+    for (const post of posts.value) {
+      const info = data[String(post.id)]
+      if (info) {
+        post._comments = info.comments || []
+        post._commentTotal = info.total || 0
+      }
     }
-  }
+  } catch { /* ignore */ }
 }
 
 // 评论头像兜底：优先用存储的 avatar，其次从同帖其他评论/帖子作者中查找
@@ -230,11 +234,11 @@ onMounted(async () => { await loadPosts(); preloadTopComments() })
       <div v-for="post in posts" :key="post.id" class="post-card glass-card">
         <!-- 作者信息 -->
         <div class="post-header">
-          <div class="post-avatar-clickable" @click="router.push(`/user/${encodeURIComponent(post.authorName || '匿名用户')}`)">
+          <div class="post-avatar-clickable" @click="router.push(`/user/${post.authorId}`)">
             <AvatarIcon :name="post.authorName" :size="44" :avatar-url="post.authorAvatar || ''" />
           </div>
           <div class="post-author-info">
-            <span class="post-author-name" @click="router.push(`/user/${encodeURIComponent(post.authorName || '匿名用户')}`)">{{ post.authorName }}</span>
+            <span class="post-author-name" @click="router.push(`/user/${post.authorId}`)">{{ post.authorName }}</span>
             <span class="post-time">{{ formatTime(post.time) }}</span>
           </div>
           <button v-if="post.authorName === currentUser || post.authorName === currentDisplayName" class="post-del-btn" :disabled="deletingPost.has(post.id)" @click.stop="handleDeletePost(post)" title="删除作品">
@@ -283,7 +287,7 @@ onMounted(async () => { await loadPosts(); preloadTopComments() })
           <div v-for="c in post._comments.slice(0, 3)" :key="c.id" class="comment-item">
             <AvatarIcon :name="c.username" :size="22" :avatar-url="getCommentAvatar(c, post)" />
             <div class="comment-body">
-              <span class="comment-name" @click="router.push(`/user/${encodeURIComponent(c.username)}`)">{{ c.username }}</span>
+              <span class="comment-name" @click="router.push(`/user/${c.userId}`)">{{ c.username }}</span>
               <span class="comment-text">{{ c.text }}</span>
             </div>
             <span class="comment-likes" @click.stop="handleCommentLike(post.id, c.id)">👍🏻 {{ c.likes }}</span>
@@ -299,7 +303,7 @@ onMounted(async () => { await loadPosts(); preloadTopComments() })
             <AvatarIcon :name="c.username" :size="28" :avatar-url="getCommentAvatar(c, post)" />
             <div class="comment-body">
               <div class="comment-header">
-                <span class="comment-name" @click="router.push(`/user/${encodeURIComponent(c.username)}`)">{{ c.username }}</span>
+                <span class="comment-name" @click="router.push(`/user/${c.userId}`)">{{ c.username }}</span>
                 <span class="comment-likes" @click="handleCommentLike(post.id, c.id)">👍🏻 {{ c.likes }}</span>
               </div>
               <span class="comment-text">{{ c.text }}</span>

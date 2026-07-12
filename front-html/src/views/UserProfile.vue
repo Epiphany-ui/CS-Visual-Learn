@@ -8,10 +8,11 @@ import RevealOnScroll from '@/components/common/RevealOnScroll.vue'
 
 const route = useRoute()
 const router = useRouter()
-const username = computed(() => route.params.username as string)
+const userId = computed(() => route.params.userId as string)
 
 const avatarUrl = ref('')
-const displayName = ref(username.value)
+const displayName = ref(userId.value)
+const usernameRef = ref('')
 const intro = ref('')
 const loading = ref(true)
 const works = ref<VideoFile[]>([])
@@ -19,30 +20,44 @@ const works = ref<VideoFile[]>([])
 async function loadAll() {
   loading.value = true
   try {
-    // 1) 从社区 API 获取该用户的 authorId、头像、昵称
-    const gRes = await fetch(`/api/v1/gallery/list?sort=time&size=100`)
-    const gData = gRes.ok ? await gRes.json() : null
-    const userPost = (gData?.data?.list || []).find((p: any) => p.authorName === username.value)
-    if (userPost) {
-      displayName.value = userPost.authorName || username.value
-      avatarUrl.value = userPost.authorAvatar || ''
-    }
-    const authorId = userPost?.authorId
+    let authorId: number | null = null
+    const param = userId.value
 
-    // 2) 从 Java 获取该用户的简介和作品列表
-    if (authorId) {
+    // 判断参数是用户ID（数字）还是用户名（非数字）
+    if (/^\d+$/.test(param)) {
+      authorId = parseInt(param, 10)
+    } else {
+      // 按用户名先查用户信息
       try {
-        const ir = await fetch(`/api/v1/user/author/home?authorId=${authorId}`)
-        if (ir.ok) {
-          const idata = await ir.json()
-          const info = idata.data?.authorInfo
-          if (info) {
-            intro.value = info.intro || ''
-            displayName.value = info.nickname || displayName.value
-            avatarUrl.value = info.avatar || avatarUrl.value
+        const infoRes = await fetch(`/api/v1/user/info-by-username?username=${encodeURIComponent(param)}`)
+        if (infoRes.ok) {
+          const infoData = await infoRes.json()
+          if (infoData.data) {
+            authorId = infoData.data.userId
+            displayName.value = infoData.data.nickname || param
+            avatarUrl.value = infoData.data.avatar || ''
+            intro.value = infoData.data.intro || ''
+            usernameRef.value = infoData.data.username || param
           }
-          // 该作者的公开作品
-          const wList = idata.data?.workList || []
+        }
+      } catch { /* ignore, continue fallback */ }
+    }
+
+    // 1. 用 authorId 从 Java 获取该用户的简介和公开作品列表
+    if (authorId) {
+      const ir = await fetch(`/api/v1/user/author/home?authorId=${authorId}`)
+      if (ir.ok) {
+        const idata = await ir.json()
+        const info = idata.data?.authorInfo
+        if (info) {
+          displayName.value = info.nickname || displayName.value
+          avatarUrl.value = info.avatar || avatarUrl.value
+          intro.value = info.intro || ''
+          if (!usernameRef.value) usernameRef.value = info.username || ''
+        }
+        // 该作者的公开作品
+        const wList = idata.data?.workList || []
+        if (wList.length > 0) {
           works.value = wList.map((w: any) => ({
             filename: w.videoPath?.split('/').pop() || '',
             task_id: w.videoPath?.split('/').pop()?.replace('.mp4','') || '',
@@ -53,15 +68,23 @@ async function loadAll() {
             title: w.title || '',
           }))
         }
-      } catch { /* ignore */ }
+      }
     }
 
-    // 3) fallback: 从 Python 后端按 username 过滤
+    // 2. Fallback: 如果 Java 没有公开作品，尝试从 Python 后端按用户名查所有作品
+    // （用于查看用户本地生成但未发布的作品）
     if (works.value.length === 0) {
-      const pyRes = await fetch(`/api/videos/list?my_works=true&username=${encodeURIComponent(username.value)}`)
-      if (pyRes.ok) {
-        const pyData = await pyRes.json()
-        works.value = pyData.data?.items || []
+      const tryName = usernameRef.value || (!/^\d+$/.test(param) ? param : '')
+      if (tryName) {
+        try {
+          const pyRes = await fetch(`/api/videos/list?my_works=true&username=${encodeURIComponent(tryName)}`)
+          if (pyRes.ok) {
+            const pyData = await pyRes.json()
+            if (pyData.data?.items?.length > 0) {
+              works.value = pyData.data.items
+            }
+          }
+        } catch { /* ignore */ }
       }
     }
   } catch { /* ignore */ }
@@ -69,8 +92,8 @@ async function loadAll() {
 }
 
 onMounted(() => { loadAll() })
-watch(() => route.params.username, () => {
-  if (route.params.username) {
+watch(() => route.params.userId, () => {
+  if (route.params.userId) {
     // 切换用户时重置数据并重新加载
     works.value = []
     intro.value = ''
@@ -90,7 +113,7 @@ watch(() => route.params.username, () => {
       <div class="user-header glass-card">
         <AvatarIcon :name="displayName" :size="80" :avatar-url="avatarUrl" />
         <h2>{{ displayName }}</h2>
-        <p class="user-id">@{{ username }}</p>
+        <p class="user-id">@{{ displayName }}</p>
         <div v-if="intro" class="user-bio">{{ intro }}</div>
         <div v-else class="user-bio-placeholder">这个人很懒，还没有填写个人简介…</div>
       </div>

@@ -36,6 +36,7 @@ export function useCurrentUser() {
   // ---- 响应式属性 ----
 
   const username = computed(() => userStore.username)
+  const userId = computed(() => userStore.userId)
   const token = computed(() => userStore.token)
   const isLoggedIn = computed(() => userStore.isLoggedIn)
 
@@ -66,6 +67,7 @@ export function useCurrentUser() {
 
   return {
     username,
+    userId,
     displayName,
     avatar,
     token,

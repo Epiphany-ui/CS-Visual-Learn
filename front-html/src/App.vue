@@ -6,6 +6,7 @@ import { useUserStore } from '@/stores/user'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
 import AnimatedBackground from '@/components/common/AnimatedBackground.vue'
+import CursorGlow from '@/components/common/CursorGlow.vue'
 
 const userStore = useUserStore()
 const router = useRouter()
@@ -23,6 +24,7 @@ onMounted(() => {
 <template>
   <div class="app-layout">
     <AnimatedBackground :particle-count="12" />
+    <CursorGlow />
     <AppHeader />
     <main class="main-content">
       <router-view v-slot="{ Component, route }">

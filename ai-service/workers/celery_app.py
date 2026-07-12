@@ -21,7 +21,7 @@ from celery import Celery
 from ai_engine import render_manim_animation, run_full_pipeline, extract_scene_class_name, generate_video_poster
 from services.config import settings
 from services.template_service import template_service
-from services.progress_service import set_progress, get_progress, save_video_meta, is_task_cancelled
+from services.progress_service import set_progress, get_progress, save_video_meta, add_to_user_works, is_task_cancelled
 from pathlib import Path as _Path
 from services.logging_config import get_logger
 
@@ -64,6 +64,7 @@ celery_app = Celery(
     task_acks_late=True,
     task_reject_on_worker_lost=True,
     result_expires=3600,
+    broker_connection_retry_on_startup=True,
 )
 
 # 可重试的异常类型（网络/Redis 瞬时错误，非代码逻辑错误）
@@ -157,7 +158,7 @@ def generate_full_task(self, requirement: str, max_retry: int = 3, quality: str 
 
 
 @celery_app.task(bind=True, max_retries=2)
-def render_template_task(self, template_id: str, params: dict, quality: str = None):
+def render_template_task(self, template_id: str, params: dict, quality: str = None, username: str = None):
     """异步模板渲染任务（带代码缓存：相同代码跳过渲染）"""
     import hashlib
     task_id = self.request.id
@@ -179,6 +180,11 @@ def render_template_task(self, template_id: str, params: dict, quality: str = No
             if _cleanup_if_cancelled(task_id, cached["video_path"]):
                 return {"success": False, "error": "cancelled"}
             vp = cached["video_path"]
+            # 缓存命中时也关联到当前用户
+            if username:
+                fn = vp.replace("/videos/", "") if vp else ""
+                if fn:
+                    add_to_user_works(username, fn)
             set_progress(task_id, state="SUCCESS", progress=100,
                          message="渲染完成（缓存命中）", video_path=vp, log="", code=code)
             return {"success": True, "code": code, "log": "缓存命中", "video_path": vp}
@@ -196,7 +202,7 @@ def render_template_task(self, template_id: str, params: dict, quality: str = No
             if fn:
                 tpl = template_service.get_template_detail(template_id)
                 tpl_name = tpl[1].get("name", template_id) if tpl[0] else template_id
-                save_video_meta(fn, title=f"{tpl_name}")
+                save_video_meta(fn, title=f"{tpl_name}", username=username or "")
             # 缓存结果：相同模板+参数下次秒级返回
             set_progress(f"tpl:{cache_key}", state="SUCCESS", progress=100,
                          message="模板缓存", video_path=video_path, log=log, code=code)

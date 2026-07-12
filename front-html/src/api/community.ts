@@ -8,6 +8,7 @@ export interface Comment {
   text: string
   likes: number
   avatar?: string
+  userId?: string
 }
 
 export const communityApi = {
@@ -44,6 +45,13 @@ export const communityApi = {
     })
   },
 
+  /** 批量获取多个帖子的评论 */
+  getCommentsBatch(workIds: number[], limit = 3) {
+    return pythonClient.get<ApiResponse<{ posts: Record<string, { comments: Comment[]; total: number }> }>>('/api/community/comments/batch', {
+      params: { ids: workIds.join(','), limit },
+    })
+  },
+
   /** 获取评论列表 */
   getComments(workId: number, limit = 3) {
     return pythonClient.get<ApiResponse<{ comments: Comment[]; total: number }>>(`/api/community/comments/${workId}`, {
@@ -52,9 +60,9 @@ export const communityApi = {
   },
 
   /** 发表评论 */
-  addComment(workId: number, username: string, text: string, avatar?: string) {
+  addComment(workId: number, username: string, text: string, avatar?: string, userId?: string) {
     return pythonClient.post<ApiResponse<{ comment: Comment }>>(`/api/community/comments/${workId}`, null, {
-      params: { username, text, avatar: avatar || '' },
+      params: { username, text, avatar: avatar || '', user_id: userId || '' },
     })
   },
 
