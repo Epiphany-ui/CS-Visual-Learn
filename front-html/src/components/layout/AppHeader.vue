@@ -91,7 +91,7 @@ function handleLogout() {
           <el-icon><User /></el-icon> 社区
         </router-link>
         <router-link to="/study" class="nav-link" active-class="nav-active">
-          <el-icon><School /></el-icon> 备考
+          <el-icon><Guide /></el-icon> 学习路径
         </router-link>
       </nav>
 

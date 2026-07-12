@@ -10,6 +10,8 @@ import type { SSETaskEvent, SSEDoneEvent } from '@/types/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import CodeEditor from '@/components/common/CodeEditor.vue'
 import CanvasTypewriter from '@/components/common/CanvasTypewriter.vue'
+import ParamPanel from '@/components/sandbox/ParamPanel.vue'
+import TaskQueue from '@/components/sandbox/TaskQueue.vue'
 
 const route = useRoute()
 const taskStore = useTaskStore()
@@ -141,7 +143,6 @@ function onSSEEvent(evt: SSETaskEvent) {
     } catch { /* ignore */ }
   }
   if (evt.log) logOutput.value += evt.log + '\n'
-  taskStore.updateProgress(evt)
   if (evt.state === 'SUCCESS') {
     onTaskDone(true)
   } else if (evt.state === 'FAILURE') {
@@ -160,7 +161,8 @@ function restoreTaskFromSession() {
   const tid = localStorage.getItem('cs:active-task')
   if (!tid) return
 
-  const cached = taskStore.activeTask
+  // 从队列中找这个任务
+  const cached = taskStore.queue.find(t => t.taskId === tid)
   // 从 sessionStorage 恢复进度（比 Pinia store 更准确）
   let savedProgress = 0
   try {
@@ -175,7 +177,7 @@ function restoreTaskFromSession() {
   if (cached?.state === 'SUCCESS') {
     progress.value = 100
     generating.value = false
-    if ((cached as any).code) code.value = (cached as any).code
+    if (cached.code) code.value = cached.code
     if (cached.videoPath) {
       videoPath.value = cached.videoPath
       videoUrl.value = `http://localhost:8000${cached.videoPath}`
@@ -188,33 +190,22 @@ function restoreTaskFromSession() {
     progressMsg.value = cached.message || '任务失败'
     return
   }
-  // 任务可能仍在运行 → 用上次保存的进度或店里的进度，取较大值避免"倒退"
-  if (cached?.state === 'PENDING' || cached?.state === 'STARTED' || cached?.state === 'RENDERING') {
+  // 任务可能仍在运行 → 重新建立 SSE 连接
+  if (cached?.state === 'PENDING' || cached?.state === 'RUNNING') {
     _activeTaskId = tid
     generating.value = true
     const bestProgress = Math.max(savedProgress, cached?.progress || 0)
     // 估算离开期间的进度增量
-    if (cached?.startTime) {
-      const elapsed = (Date.now() - cached.startTime) / 1000
-      // 假设 120 秒完成，线性估计额外进度
+    if (cached?.createdAt) {
+      const elapsed = (Date.now() - cached.createdAt) / 1000
       const estimated = Math.min(92, Math.round(elapsed / 120 * 100))
       startSmoothProgress(Math.max(bestProgress, estimated))
     } else {
       startSmoothProgress(bestProgress)
     }
     progressMsg.value = cached.message || '恢复中...'
-    code.value = (cached as any)?.code || ''
-    connect(tid, (data) => {
-      if ((data as SSEDoneEvent).type === 'done') { onTaskDone(true); return }
-      const evt = data as SSETaskEvent
-      if (evt.state === 'UNKNOWN') {
-        stopSmoothProgress(); generating.value = false; disconnect()
-        localStorage.removeItem('cs:active-task')
-        progressMsg.value = '任务已过期，请重新开始'
-        return
-      }
-      onSSEEvent(evt)
-    }, onSSEError)
+    if (cached.code) code.value = cached.code
+    _connectTaskSSE(tid)
     return
   }
   // 其他状态：清理
@@ -224,12 +215,21 @@ function restoreTaskFromSession() {
 // --- 操作 ---
 function handleGenerate() {
   if (!requirement.value.trim()) return
-  startAsyncTask(() => generationApi.asyncGenerate(requirement.value.trim(), 3, renderQuality.value, username.value))
+  startAsyncTask(
+    () => generationApi.asyncGenerate(requirement.value.trim(), 3, renderQuality.value, username.value),
+    { title: requirement.value.slice(0, 30), type: 'generate' }
+  )
 }
 
 function handleRender() {
   if (!code.value.trim()) { ElMessage.warning('请先输入或生成 Manim 代码'); return }
-  startAsyncTask(() => generationApi.asyncRender(code.value, renderQuality.value, username.value))
+  // 从代码中提取类名作为标题
+  const classMatch = code.value.match(/class\s+(\w+)\s*\(\s*\w*Scene/)
+  const title = classMatch?.[1] || '手动渲染'
+  startAsyncTask(
+    () => generationApi.asyncRender(code.value, renderQuality.value, username.value),
+    { title, type: 'render' }
+  )
 }
 
 async function handleCancelTask() {
@@ -326,40 +326,109 @@ function getLastError(): string {
 }
 
 // --- 异步任务核心 ---
-async function startAsyncTask(apiCall: () => Promise<any>) {
-  // 重置所有状态
-  generating.value = true
-  progress.value = 0
-  progressMsg.value = ''
-  videoPath.value = ''
-  videoUrl.value = ''
-  logOutput.value = ''
-  savedToGallery.value = false
-  currentFilename.value = ''
-  // 不重置 code — 保留用户编辑的内容
-  startSmoothProgress(0)
-
+async function startAsyncTask(apiCall: () => Promise<any>, options?: { title?: string; type?: 'generate' | 'render' | 'template' }) {
   try {
     const res = await apiCall()
     const taskId = res.data.data?.task_id
-    if (!taskId) { generating.value = false; return }
+    if (!taskId) return
 
-    _activeTaskId = taskId
-    localStorage.setItem('cs:active-task', taskId)
-    try {
-      const pending = JSON.parse(localStorage.getItem('cs:pending-tasks') || '[]')
-      if (!pending.includes(taskId)) { pending.unshift(taskId); localStorage.setItem('cs:pending-tasks', JSON.stringify(pending.slice(0, 20))) }
-    } catch { /* ignore */ }
-    taskStore.startTask(taskId)
+    // 加入任务队列
+    const title = options?.title || requirement.value || '渲染任务'
+    const type = options?.type || 'render'
+    const task = taskStore.addTask({
+      taskId,
+      title,
+      type,
+      code: code.value,
+      prompt: requirement.value,
+    })
 
-    connect(taskId, (data) => {
-      if ((data as SSEDoneEvent).type === 'done') { onTaskDone(true); return }
+    // 如果这个任务被标记为运行中（队列第一个），建立 SSE 连接
+    if (task.state === 'RUNNING') {
+      _connectTaskSSE(taskId)
+      generating.value = true
+      startSmoothProgress(0)
+    }
+  } catch {
+    ElMessage.error('任务提交失败')
+  }
+}
+
+// 建立单个任务的 SSE 连接
+function _connectTaskSSE(taskId: string) {
+  _activeTaskId = taskId
+  localStorage.setItem('cs:active-task', taskId)
+  taskStore.markTaskRunning(taskId)
+
+  connect(taskId, (data) => {
+    if ((data as SSEDoneEvent).type === 'done') {
+      taskStore.updateTaskProgress(taskId, { state: 'SUCCESS' })
+      _onQueueTaskDone(taskId, true)
+      return
+    }
+    // 更新 store 中的进度
+    taskStore.updateTaskProgress(taskId, {
+      state: (data as SSETaskEvent).state,
+      progress: (data as SSETaskEvent).progress,
+      message: (data as SSETaskEvent).message,
+      video_path: (data as SSETaskEvent).video_path,
+    })
+    // 同步到沙箱当前显示（如果是当前活跃任务）
+    if (taskId === _activeTaskId) {
       onSSEEvent(data as SSETaskEvent)
-    }, onSSEError)
-  } catch { stopSmoothProgress(); generating.value = false }
+    }
+  }, () => {
+    if (taskId === _activeTaskId) {
+      onSSEError()
+    }
+  })
+}
+
+// 队列中的任务完成后，自动启动下一个
+function _onQueueTaskDone(taskId: string, success: boolean) {
+  if (taskId === _activeTaskId) {
+    onTaskDone(success)
+  }
+  disconnect()
+
+  // 找下一个排队的任务
+  const next = taskStore.pendingTasks[0]
+  if (next) {
+    // 延迟一下再启动，给用户感知
+    setTimeout(() => {
+      _connectTaskSSE(next.taskId)
+      generating.value = true
+      startSmoothProgress(next.progress || 0)
+    }, 500)
+  }
+}
+
+// 从队列加载任务结果到沙箱
+function loadTaskFromQueue(taskId: string) {
+  const task = taskStore.loadTaskResult(taskId)
+  if (!task) return
+
+  if (task.code) {
+    _aiChanging = true
+    code.value = task.code
+  }
+  if (task.prompt) {
+    requirement.value = task.prompt
+  }
+  if (task.videoPath) {
+    videoPath.value = task.videoPath
+    videoUrl.value = `http://localhost:8000${task.videoPath}`
+    currentFilename.value = task.videoPath.replace('/videos/', '')
+  }
+  progress.value = task.progress
+  progressMsg.value = task.message
+  ElMessage.success('已加载任务结果')
 }
 
 onMounted(() => {
+  // 恢复任务队列
+  taskStore.restore()
+
   // Fork 过来的代码
   const forkedCode = sessionStorage.getItem('cs:forked-code')
   if (forkedCode) {
@@ -386,6 +455,28 @@ onMounted(() => {
     restoreTaskFromSession()
   }
 })
+
+// 监听路由参数变化（同一组件内跳转时 onMounted 不触发）
+watch(
+  () => route.query.prompt,
+  (newPrompt, oldPrompt) => {
+    if (newPrompt && newPrompt !== oldPrompt) {
+      // 从学习路径/百科点击新的动画 → 清空状态并重新生成
+      disconnect()
+      stopSmoothProgress()
+      generating.value = false
+      requirement.value = newPrompt as string
+      code.value = ''
+      videoUrl.value = ''
+      videoPath.value = ''
+      currentFilename.value = ''
+      logOutput.value = ''
+      typingActive.value = false
+      localStorage.removeItem('cs:active-task')
+      nextTick(() => handleGenerate())
+    }
+  }
+)
 
 onUnmounted(() => {
   disconnect()
@@ -455,6 +546,8 @@ onUnmounted(() => {
       </div>
 
       <div class="sb-panel panel-preview">
+        <ParamPanel :code="code" @update:code="(v: string) => { code = v }" @render="handleRender" />
+        <TaskQueue @load-task="loadTaskFromQueue" />
         <div class="panel-header"><el-icon><VideoCamera /></el-icon> 预览</div>
         <div class="panel-body preview-body">
           <div v-if="videoUrl" class="video-player">
@@ -595,6 +688,19 @@ onUnmounted(() => {
     0 8px 32px rgba(124,58,237,0.08);
 }
 [data-theme="light"] .sb-panel:hover { border-color: rgba(124,58,237,0.25); }
+
+.panel-preview {
+  display: flex;
+  flex-direction: column;
+}
+.panel-preview :deep(.param-panel) {
+  margin: var(--space-sm);
+  flex-shrink: 0;
+}
+.panel-preview :deep(.task-queue) {
+  margin: 0 var(--space-sm) var(--space-sm);
+  flex-shrink: 0;
+}
 
 .panel-header {
   padding: 12px 16px; font-size: 0.8rem; font-weight: 650;

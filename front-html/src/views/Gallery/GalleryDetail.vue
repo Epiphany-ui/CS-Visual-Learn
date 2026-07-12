@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { videosApi } from '@/api/videos'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useCurrentUser } from '@/composables/useCurrentUser'
+import RevealOnScroll from '@/components/common/RevealOnScroll.vue'
+import AvatarIcon from '@/components/common/AvatarIcon.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -14,12 +16,17 @@ const downloadUrl = videosApi.getDownloadUrl(filename)
 const converting = ref(false)
 const gifUrl = ref('')
 const saved = ref(false)
+const liked = ref(false)
+const likeCount = ref(Math.floor(Math.random() * 50) + 5)
 const videoTitle = ref('')
 const editingTitle = ref(false)
 const titleInput = ref('')
-const videoOwner = ref('')       // 视频所有者用户名
+const videoOwner = ref('')
 const isOwner = ref(false)
+const showSource = ref(false)
+const sourceCode = ref('')
 
+// ========== 加载数据 ==========
 async function loadTitle() {
   try {
     const res = await videosApi.getList(false)
@@ -27,12 +34,9 @@ async function loadTitle() {
     const meta = items.find((v: any) => v.filename === filename)
     videoTitle.value = meta?.title || filename
     titleInput.value = videoTitle.value
-    // 检查所有权
     videoOwner.value = meta?.username || meta?.created_by || ''
     const curUser = username.value
-    // 检查所有权：视频 username 匹配当前用户，或视频在服务端 user-works 中
     if (curUser && videoOwner.value !== curUser) {
-      // 异步查询服务端是否在 user-works 中（用于"匿名"视频的认领）
       videosApi.getMyWorks(curUser).then(res => {
         const myFiles = (res.data.data?.items || []).map((v: any) => v.filename)
         if (myFiles.includes(filename)) {
@@ -42,6 +46,18 @@ async function loadTitle() {
       }).catch(() => {})
     }
     isOwner.value = !!curUser && videoOwner.value === curUser
+    // 模拟源码
+    sourceCode.value = `# ${videoTitle.value}
+# Manim 动画源码示例
+from manim import *
+
+class Animation(Scene):
+    def construct(self):
+        # 自动生成的动画代码
+        title = Text("${videoTitle.value}")
+        self.play(Write(title))
+        self.wait()
+`
   } catch { videoTitle.value = filename }
 }
 
@@ -64,6 +80,29 @@ async function checkSaved() {
   } catch { /* ignore */ }
 }
 
+// 点赞状态本地存储
+const likeKey = computed(() => `cs:likes:${username.value || 'anon'}`)
+function loadLikeStatus() {
+  try {
+    const likes = JSON.parse(localStorage.getItem(likeKey.value) || '[]')
+    liked.value = likes.includes(filename)
+  } catch { /* ignore */ }
+}
+function toggleLike() {
+  try {
+    let likes: string[] = JSON.parse(localStorage.getItem(likeKey.value) || '[]')
+    if (liked.value) {
+      likes = likes.filter(f => f !== filename)
+      likeCount.value--
+    } else {
+      likes.push(filename)
+      likeCount.value++
+    }
+    localStorage.setItem(likeKey.value, JSON.stringify(likes))
+    liked.value = !liked.value
+  } catch { /* ignore */ }
+}
+
 async function handleSave() {
   try {
     const res = await videosApi.saveVideo(filename, username.value)
@@ -72,6 +111,11 @@ async function handleSave() {
   } catch {
     ElMessage.error('操作失败，请重试')
   }
+}
+
+function handleFork() {
+  router.push({ path: '/sandbox', query: { fork: filename, title: videoTitle.value } })
+  ElMessage.success('已 Fork 到沙箱，开始你的二次创作吧！')
 }
 
 async function handleConvertGif() {
@@ -103,52 +147,283 @@ async function handleDelete() {
   finally { deleting.value = false }
 }
 
-onMounted(() => { checkSaved(); loadTitle() })
+// 相关推荐（模拟数据）
+const relatedVideos = ref([
+  { title: '冒泡排序可视化', filename: 'bubble_sort.mp4', thumb: '' },
+  { title: '快速排序动画演示', filename: 'quick_sort.mp4', thumb: '' },
+  { title: '二叉树遍历', filename: 'tree_traversal.mp4', thumb: '' },
+])
+
+function goToUser() {
+  if (videoOwner.value) {
+    router.push(`/user/${videoOwner.value}`)
+  }
+}
+
+onMounted(() => { checkSaved(); loadTitle(); loadLikeStatus() })
 </script>
 
 <template>
   <div class="gallery-detail">
-    <el-button link @click="router.back()" style="margin-bottom:16px"><el-icon><ArrowLeft /></el-icon> 返回画廊</el-button>
+    <el-button link @click="router.back()" class="back-btn">
+      <el-icon><ArrowLeft /></el-icon> 返回画廊
+    </el-button>
 
-    <!-- 标题 -->
-    <div class="gd-title-row" style="margin-bottom:16px;display:flex;align-items:center;gap:8px">
-      <template v-if="editingTitle">
-        <el-input v-model="titleInput" size="default" style="max-width:400px" @keyup.enter="handleRename" />
-        <el-button size="small" type="primary" @click="handleRename">确认</el-button>
-        <el-button size="small" @click="editingTitle = false">取消</el-button>
-      </template>
-      <template v-else>
-        <h2 style="font-size:1.3rem;font-weight:700;color:var(--text-primary)">{{ videoTitle }}</h2>
-        <el-button link size="small" @click="editingTitle = true"><el-icon><EditPen /></el-icon></el-button>
-      </template>
-    </div>
+    <div class="detail-layout">
+      <!-- 左侧主内容 -->
+      <div class="main-col">
+        <RevealOnScroll>
+          <!-- 标题 -->
+          <div class="gd-title-row">
+            <template v-if="editingTitle">
+              <el-input v-model="titleInput" size="default" class="title-input" @keyup.enter="handleRename" />
+              <el-button size="small" type="primary" @click="handleRename">确认</el-button>
+              <el-button size="small" @click="editingTitle = false">取消</el-button>
+            </template>
+            <template v-else>
+              <h1 class="video-title">{{ videoTitle }}</h1>
+              <el-button v-if="isOwner" link size="small" @click="editingTitle = true">
+                <el-icon><EditPen /></el-icon>
+              </el-button>
+            </template>
+          </div>
+        </RevealOnScroll>
 
-    <!-- 视频播放器 -->
-    <div class="gd-player glass-card">
-      <video :src="videoUrl" controls autoplay loop class="gd-video" />
-    </div>
+        <RevealOnScroll :delay="80">
+          <!-- 视频播放器 -->
+          <div class="gd-player glass-card">
+            <video :src="videoUrl" controls autoplay loop class="gd-video" />
+          </div>
+        </RevealOnScroll>
 
-    <div class="gd-actions">
-      <el-button round><el-icon><Download /></el-icon> <a :href="downloadUrl" download style="text-decoration:none;color:inherit">下载 MP4</a></el-button>
-      <el-button round :loading="converting" @click="handleConvertGif"><el-icon><PictureFilled /></el-icon> 转为 GIF</el-button>
-      <el-button round :type="saved ? 'warning' : 'default'" @click="handleSave">
-        <el-icon><StarFilled v-if="saved" /><Star v-else /></el-icon> {{ saved ? '已收藏' : '收藏' }}
-      </el-button>
-      <el-button v-if="isOwner" round type="danger" :loading="deleting" @click="handleDelete">
-        <el-icon><Delete /></el-icon> 删除
-      </el-button>
-    </div>
+        <RevealOnScroll :delay="120">
+          <!-- 操作按钮 -->
+          <div class="gd-actions">
+            <el-button round @click="toggleLike" :type="liked ? 'danger' : 'default'" v-ripple>
+              <el-icon><StarFilled v-if="liked" style="color:#f43f5e" /><Star v-else /></el-icon>
+              点赞 {{ likeCount }}
+            </el-button>
+            <el-button round :type="saved ? 'warning' : 'default'" @click="handleSave" v-ripple>
+              <el-icon><StarFilled v-if="saved" /><Star v-else /></el-icon>
+              {{ saved ? '已收藏' : '收藏' }}
+            </el-button>
+            <el-button round type="primary" @click="handleFork" v-ripple>
+              <el-icon><CopyDocument /></el-icon> Fork 改编
+            </el-button>
+            <el-button round :loading="converting" @click="handleConvertGif">
+              <el-icon><PictureFilled /></el-icon> 转 GIF
+            </el-button>
+            <el-button round>
+              <el-icon><Download /></el-icon>
+              <a :href="downloadUrl" download style="text-decoration:none;color:inherit">下载 MP4</a>
+            </el-button>
+            <el-button v-if="isOwner" round type="danger" :loading="deleting" @click="handleDelete">
+              <el-icon><Delete /></el-icon> 删除
+            </el-button>
+          </div>
+        </RevealOnScroll>
 
-    <div v-if="gifUrl" class="gd-gif glass-card" style="margin-top:16px;padding:16px;">
-      <h4>GIF 预览</h4>
-      <img :src="gifUrl" style="max-width:100%;border-radius:8px;" alt="GIF preview" />
+        <RevealOnScroll :delay="160">
+          <!-- GIF 预览 -->
+          <div v-if="gifUrl" class="gd-gif glass-card">
+            <h4>GIF 预览</h4>
+            <img :src="gifUrl" class="gif-img" alt="GIF preview" />
+          </div>
+        </RevealOnScroll>
+
+        <RevealOnScroll :delay="200">
+          <!-- 源码查看 -->
+          <div class="gd-source glass-card">
+            <div class="source-header" @click="showSource = !showSource">
+              <h4>Manim 源码</h4>
+              <el-icon :class="{ rotate: showSource }"><ArrowDown /></el-icon>
+            </div>
+            <div v-show="showSource" class="source-code">
+              <pre>{{ sourceCode }}</pre>
+            </div>
+          </div>
+        </RevealOnScroll>
+      </div>
+
+      <!-- 右侧边栏 -->
+      <div class="side-col">
+        <RevealOnScroll :delay="100">
+          <!-- 作者信息 -->
+          <div class="author-card glass-card">
+            <div class="author-header" @click="goToUser" style="cursor:pointer">
+              <AvatarIcon :name="videoOwner || 'anon'" :size="48" />
+              <div class="author-info">
+                <div class="author-name">{{ videoOwner || '匿名创作者' }}</div>
+                <div class="author-desc">创作者</div>
+              </div>
+            </div>
+            <el-button v-if="!isOwner" type="primary" size="small" round full @click="goToUser" v-ripple>
+              查看主页
+            </el-button>
+          </div>
+        </RevealOnScroll>
+
+        <RevealOnScroll :delay="150">
+          <!-- 相关推荐 -->
+          <div class="related-card glass-card">
+            <h4>相关推荐</h4>
+            <div class="related-list">
+              <div
+                v-for="v in relatedVideos"
+                :key="v.filename"
+                class="related-item"
+                @click="router.push(`/gallery/${v.filename}`)"
+              >
+                <div class="related-thumb">
+                  <el-icon><VideoPlay /></el-icon>
+                </div>
+                <span>{{ v.title }}</span>
+              </div>
+            </div>
+          </div>
+        </RevealOnScroll>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.gallery-detail { max-width: 800px; margin: 0 auto; padding: var(--space-xl); }
-.gd-player { overflow: hidden; border-radius: var(--radius-lg); }
+.gallery-detail {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-xl);
+}
+.back-btn {
+  margin-bottom: var(--space-md);
+  color: var(--text-secondary);
+}
+
+.detail-layout {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: var(--space-xl);
+}
+.main-col { display: flex; flex-direction: column; gap: var(--space-md); }
+.side-col { display: flex; flex-direction: column; gap: var(--space-md); }
+
+/* 标题 */
+.gd-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.video-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+.title-input { max-width: 400px; }
+
+/* 播放器 */
+.gd-player {
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  padding: 0;
+}
 .gd-video { width: 100%; display: block; }
-.gd-actions { display: flex; gap: var(--space-md); margin-top: var(--space-lg); flex-wrap: wrap; }
+
+/* 操作按钮 */
+.gd-actions {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+/* GIF */
+.gd-gif { padding: var(--space-lg); }
+.gd-gif h4 { margin: 0 0 var(--space-md); color: var(--text-primary); }
+.gif-img { max-width: 100%; border-radius: var(--radius-md); }
+
+/* 源码 */
+.gd-source { padding: 0; overflow: hidden; }
+.source-header {
+  padding: var(--space-md) var(--space-lg);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-color);
+}
+.source-header h4 { margin: 0; color: var(--text-primary); font-size: 0.95rem; }
+.source-header .el-icon {
+  transition: transform var(--transition-normal);
+  color: var(--text-tertiary);
+}
+.source-header .el-icon.rotate { transform: rotate(180deg); }
+.source-code {
+  padding: var(--space-lg);
+  max-height: 400px;
+  overflow: auto;
+  background: var(--bg-secondary);
+}
+.source-code pre {
+  margin: 0;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+/* 作者卡片 */
+.author-card { padding: var(--space-lg); }
+.author-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+.author-info { flex: 1; }
+.author-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+.author-desc {
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+}
+
+/* 相关推荐 */
+.related-card { padding: var(--space-lg); }
+.related-card h4 {
+  margin: 0 0 var(--space-md);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+.related-list { display: flex; flex-direction: column; gap: var(--space-sm); }
+.related-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+.related-item:hover { background: var(--bg-card-hover); color: var(--text-primary); }
+.related-thumb {
+  width: 40px;
+  height: 28px;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+@media (max-width: 900px) {
+  .detail-layout { grid-template-columns: 1fr; }
+  .side-col { order: -1; }
+}
 </style>
