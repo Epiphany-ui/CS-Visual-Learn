@@ -63,18 +63,15 @@ async function loadTitle() {
     }
     isOwner.value = !!curUser && videoOwner.value === curUser
     isPublished.value = (meta as any)?.published === '1'
-    // 模拟源码
-    sourceCode.value = `# ${videoTitle.value}
-# Manim 动画源码示例
-from manim import *
-
-class Animation(Scene):
-    def construct(self):
-        # 自动生成的动画代码
-        title = Text("${videoTitle.value}")
-        self.play(Write(title))
-        self.wait()
-`
+    // 从服务端获取真实源码
+    const taskId = filename.replace('.mp4', '')
+    try {
+      const codeRes = await fetch(`/api/code/${taskId}.py`)
+      if (codeRes.ok) {
+        sourceCode.value = await codeRes.text()
+      }
+    } catch { /* ignore */ }
+    if (!sourceCode.value) sourceCode.value = '// 源码未找到: ' + filename
   } catch { videoTitle.value = filename }
 }
 

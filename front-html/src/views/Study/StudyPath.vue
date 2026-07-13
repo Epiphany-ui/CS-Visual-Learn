@@ -140,17 +140,34 @@ const paths: StudyPath[] = [
 const activePathId = ref<string | null>(null)
 const learned = ref<Record<string, boolean>>({}) // key: pathId:chapterId:itemName
 
-// 本地存储
+// 跨设备同步：优先从服务端加载，保存到服务端 + localStorage 双写
 const storageKey = computed(() => `cs:learn:${username.value || 'anon'}`)
 
-function loadProgress() {
+async function loadProgress() {
+  // 从服务端加载
+  try {
+    const res = await fetch(`/api/study/progress?username=${encodeURIComponent(username.value || 'anon')}`)
+    if (res.ok) {
+      const data = await res.json()
+      if (data.data?.progress && Object.keys(data.data.progress).length > 0) {
+        learned.value = data.data.progress
+        localStorage.setItem(storageKey.value, JSON.stringify(data.data.progress))
+        return
+      }
+    }
+  } catch { /* ignore */ }
+  // fallback: localStorage
   try {
     const saved = localStorage.getItem(storageKey.value)
     if (saved) learned.value = JSON.parse(saved)
   } catch { /* ignore */ }
 }
+
 function saveProgress() {
-  localStorage.setItem(storageKey.value, JSON.stringify(learned.value))
+  const json = JSON.stringify(learned.value)
+  localStorage.setItem(storageKey.value, json)
+  // 异步同步到服务端
+  fetch(`/api/study/progress?username=${encodeURIComponent(username.value || 'anon')}&progress=${encodeURIComponent(json)}`, { method: 'POST' }).catch(() => {})
 }
 
 onMounted(loadProgress)

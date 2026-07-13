@@ -521,6 +521,15 @@ def _parse_wiki_meta(file_path: Path) -> dict:
     return meta
 
 
+@app.get("/api/code/{filename}")
+async def api_get_code(filename: str):
+    """获取生成的 Manim 源码文件"""
+    code_file = CODE_OUTPUT_SUBDIR / filename
+    if not code_file.exists():
+        raise HTTPException(status_code=404, detail="源码文件不存在")
+    return FileResponse(path=str(code_file), media_type="text/plain")
+
+
 @app.get("/api/wiki/categories")
 async def api_wiki_categories():
     """获取所有词条分类（从内存缓存读取，不触碰磁盘）"""
@@ -1206,6 +1215,32 @@ async def api_like_comment(work_id: int, comment_id: str, username: str = ""):
     """给评论点赞/取消点赞"""
     result = like_comment(comment_id, work_id, username)
     return success_response({"commentId": comment_id, "liked": result["liked"], "likes": result["likes"]})
+
+
+# ===================== v1.0 学习进度 API（跨设备同步） =====================
+
+@app.get("/api/study/progress")
+async def api_study_progress(username: str = ""):
+    """获取用户的学习进度"""
+    try:
+        r = _get_redis()
+        raw = r.get(f"cs:study:{username}") or "{}"
+        progress = json.loads(raw)
+        return success_response({"progress": progress})
+    except Exception:
+        return success_response({"progress": {}})
+
+
+@app.post("/api/study/progress")
+async def api_study_save_progress(username: str = "", progress: str = ""):
+    """保存用户的学习进度"""
+    try:
+        r = _get_redis()
+        r.set(f"cs:study:{username}", progress)
+        _maybe_bgsave()
+        return success_response({}, "保存成功")
+    except Exception:
+        return error_response("保存失败")
 
 
 # ===================== v1.0 逐帧调试 API =====================
