@@ -741,3 +741,32 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ==================== Framer 风格增强 ==================== */
+/* 毛玻璃卡片升级 */
+.glass-card {
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.glass-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.4), 0 0 0 1px rgba(124,58,237,0.15);
+  border-color: rgba(124,58,237,0.3);
+}
+/* 弹性入场 */
+@keyframes spring-in {
+  0% { opacity: 0; transform: scale(0.92) translateY(16px); }
+  60% { opacity: 1; transform: scale(1.02) translateY(-2px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+.spring-in { animation: spring-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
+/* 按钮悬浮微动 */
+.el-button { transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
+.el-button:hover { transform: translateY(-1px); }
+.el-button--primary:hover { box-shadow: 0 8px 24px rgba(124,58,237,0.35); }
+/* 链接下划线动画 */
+a.nav-link { position: relative; }
+a.nav-link::after { content: ''; position: absolute; bottom: -2px; left: 50%; width: 0; height: 2px; background: var(--accent-purple); transition: all 0.3s ease; transform: translateX(-50%); }
+a.nav-link:hover::after { width: 100%; }
+/* 滚动条美化 */
+::-webkit-scrollbar-thumb { background: rgba(124,58,237,0.3); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(124,58,237,0.5); }
