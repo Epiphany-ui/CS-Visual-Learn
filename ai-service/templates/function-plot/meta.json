@@ -2,7 +2,11 @@
   "name": "一元函数图像绘制",
   "description": "输入任意一元函数表达式，自动绘制函数图像，支持调整坐标范围、网格显示、绘制动画",
   "category": "数学",
-  "tags": ["函数", "图像", "高等数学"],
+  "tags": [
+    "函数",
+    "图像",
+    "高等数学"
+  ],
   "difficulty": "入门",
   "cover": "",
   "use_count": 0,
@@ -71,5 +75,10 @@
       "default": true,
       "description": "是否显示函数曲线绘制动画"
     }
-  ]
+  ],
+  "rating": 4.0,
+  "rating_count": 1,
+  "_ratings": {
+    "秦韶阳爸爸": 4
+  }
 }

@@ -34,6 +34,9 @@ class TemplateInfo:
         self.cover = meta.get("cover", "")
         self.params = meta.get("params", [])  # 参数列表：[{name, label, type, default, required, description, min, max, options}]
         self.use_count = meta.get("use_count", 0)
+        self.rating = meta.get("rating", 0.0)  # 平均评分 (0-5)
+        self.rating_count = meta.get("rating_count", 0)  # 评分人数
+        self._ratings: dict = meta.get("_ratings", {})  # username → score 映射（内存中，持久化到 meta.json）
 
     def to_dict(self, include_params: bool = True) -> dict:
         data = {
@@ -44,7 +47,9 @@ class TemplateInfo:
             "tags": self.tags,
             "difficulty": self.difficulty,
             "cover": self.cover,
-            "use_count": self.use_count
+            "use_count": self.use_count,
+            "rating": self.rating,
+            "rating_count": self.rating_count
         }
         if include_params:
             data["params"] = self.params
@@ -95,6 +100,13 @@ class TemplateService:
                 if meta_file.exists():
                     meta = json.loads(meta_file.read_text(encoding="utf-8"))
                     tpl_info.use_count = max(tpl_info.use_count, meta.get("use_count", 0))
+                    # 同步评分数据
+                    disk_rating = meta.get("rating", 0.0)
+                    disk_count = meta.get("rating_count", 0)
+                    if disk_count > tpl_info.rating_count:
+                        tpl_info.rating = disk_rating
+                        tpl_info.rating_count = disk_count
+                    tpl_info._ratings = meta.get("_ratings", {})
             except Exception:
                 pass
 
@@ -192,6 +204,57 @@ class TemplateService:
             return False, f"模板文件 {template_id}/template.py.j2 不存在"
         except Exception as e:
             return False, f"模板渲染失败：{str(e)}"
+
+    def _persist_meta(self, template_id: str):
+        """将当前模板的完整元信息持久化到 meta.json"""
+        try:
+            meta_file = TEMPLATES_DIR / template_id / "meta.json"
+            if not meta_file.exists():
+                return
+            meta = json.loads(meta_file.read_text(encoding="utf-8"))
+            tpl_info = self._templates.get(template_id)
+            if tpl_info:
+                meta["use_count"] = tpl_info.use_count
+                meta["rating"] = tpl_info.rating
+                meta["rating_count"] = tpl_info.rating_count
+                meta["_ratings"] = tpl_info._ratings
+            meta_file.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+
+    def rate_template(self, template_id: str, username: str, score: int) -> Tuple[bool, str]:
+        """
+        用户对模板评分（1-5 分），同一用户重复评分会覆盖旧分数
+        :return: (是否成功, 消息)
+        """
+        if template_id not in self._templates:
+            return False, f"模板 {template_id} 不存在"
+        if not isinstance(score, int) or score < 1 or score > 5:
+            return False, "评分必须在 1-5 之间"
+        if not username:
+            return False, "请先登录"
+
+        self._refresh_use_counts()  # 先同步最新的磁盘数据
+        tpl_info = self._templates[template_id]
+
+        # 记录用户评分
+        old_score = tpl_info._ratings.get(username)
+        tpl_info._ratings[username] = score
+
+        # 重新计算平均分
+        all_scores = list(tpl_info._ratings.values())
+        tpl_info.rating = round(sum(all_scores) / len(all_scores), 2)
+        tpl_info.rating_count = len(all_scores)
+
+        # 持久化
+        self._persist_meta(template_id)
+        return True, "评分成功"
+
+    def get_user_rating(self, template_id: str, username: str) -> int | None:
+        """获取用户对某模板的已有评分"""
+        if template_id not in self._templates:
+            return None
+        return self._templates[template_id]._ratings.get(username)
 
     def get_categories(self) -> List[str]:
         """获取所有模板分类"""

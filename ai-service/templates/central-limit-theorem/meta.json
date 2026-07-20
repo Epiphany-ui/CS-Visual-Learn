@@ -64,5 +64,10 @@
       "max": 2.0,
       "description": "动画播放速度，数值越大越快"
     }
-  ]
+  ],
+  "rating": 5.0,
+  "rating_count": 1,
+  "_ratings": {
+    "秦韶阳爸爸": 5
+  }
 }

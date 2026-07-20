@@ -13,6 +13,7 @@ import time as _time
 from pathlib import Path
 from typing import Optional
 
+import jwt
 from fastapi import FastAPI, HTTPException, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
@@ -46,7 +47,7 @@ from services.progress_service import (
     save_to_gallery, is_in_gallery, get_gallery_filenames,
     save_video_meta, get_video_meta, get_all_video_metas, update_video_title,
     add_to_user_works, get_user_works, mark_task_cancelled,
-    set_video_published, is_video_published,
+    set_video_published, is_video_published, _get_redis, _maybe_bgsave,
 )
 from services.comment_service import (
     toggle_like, is_liked, get_like_counts, check_user_likes,
@@ -679,6 +680,50 @@ async def api_template_reload():
     return success_response(None, "模板重载完成")
 
 
+class TemplateRateRequest(BaseModel):
+    score: int  # 1-5
+
+
+@app.post("/api/templates/{template_id}/rate")
+async def api_template_rate(template_id: str, req: TemplateRateRequest, request: Request):
+    """用户对模板评分（1-5），同一用户重复评分会覆盖旧值"""
+    # 手动提取 JWT 用户名（因为 /api/templates/ 在公开路径中，中间件不会处理）
+    username = ""
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        try:
+            payload = jwt.decode(auth[7:], settings.jwt_secret, algorithms=["HS256", "HS384", "HS512"])
+            username = payload.get("sub", "")
+        except Exception as e:
+            logger.warning(f"[rate] JWT decode failed: {type(e).__name__}: {e}")
+    else:
+        logger.warning(f"[rate] No valid Bearer token. auth header present: {bool(auth)}, prefix match: {auth[:20] if auth else 'N/A'}")
+    if not username:
+        return error_response("请先登录", code=401)
+
+    success, msg = template_service.rate_template(template_id, username, req.score)
+    if not success:
+        return error_response(msg)
+    return success_response(None, msg)
+
+
+@app.get("/api/templates/{template_id}/my-rating")
+async def api_template_my_rating(template_id: str, request: Request):
+    """获取当前用户对模板的已有评分"""
+    username = ""
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        try:
+            payload = jwt.decode(auth[7:], settings.jwt_secret, algorithms=["HS256", "HS384", "HS512"])
+            username = payload.get("sub", "")
+        except Exception:
+            pass
+    if not username:
+        return success_response({"score": None})
+    score = template_service.get_user_rating(template_id, username)
+    return success_response({"score": score})
+
+
 # ===================== Prompt 管理接口 =====================
 
 @app.get("/api/prompts/list")
@@ -1221,7 +1266,7 @@ async def api_like_comment(work_id: int, comment_id: str, username: str = ""):
 
 @app.get("/api/study/progress")
 async def api_study_progress(username: str = ""):
-    """获取用户的学习进度"""
+    """获取用户的学习进度（含时间戳和时长）"""
     try:
         r = _get_redis()
         raw = r.get(f"cs:study:{username}") or "{}"
@@ -1232,15 +1277,110 @@ async def api_study_progress(username: str = ""):
 
 
 @app.post("/api/study/progress")
-async def api_study_save_progress(username: str = "", progress: str = ""):
-    """保存用户的学习进度"""
+async def api_study_save_progress(
+    username: str = "",
+    progress: str = "",
+    duration: int = 0,
+    timestamp: str = "",
+):
+    """
+    保存用户的学习进度。
+    progress: JSON 编码的学习项 map（key → true/false）
+    duration: 本次学习时长（秒，可选）
+    timestamp: 本次学习时间戳（ISO 字符串，可选）
+    同时记录学习日志用于生成报告
+    """
     try:
         r = _get_redis()
+        # 保存进度
         r.set(f"cs:study:{username}", progress)
+
+        # 记录学习日志（用于报告统计）
+        if duration > 0 or timestamp:
+            today = timestamp[:10] if timestamp else _time.strftime("%Y-%m-%d")
+            log_key = f"cs:study:log:{username}:{today}"
+            existing = r.get(log_key)
+            if existing:
+                log_entry = json.loads(existing)
+                log_entry["count"] = log_entry.get("count", 0) + 1
+                log_entry["seconds"] = log_entry.get("seconds", 0) + duration
+            else:
+                log_entry = {"date": today, "count": 1, "seconds": duration}
+            r.set(log_key, json.dumps(log_entry, ensure_ascii=False))
+            r.expire(log_key, 60 * 86400)  # 60 天过期
+
         _maybe_bgsave()
         return success_response({}, "保存成功")
     except Exception:
         return error_response("保存失败")
+
+
+@app.get("/api/study/report")
+async def api_study_report(username: str = ""):
+    """
+    学习报告：总学习时长、连续打卡天数、每日统计
+    """
+    try:
+        r = _get_redis()
+        # 读取所有学习日志
+        logs: list[dict] = []
+        cursor = 0
+        pattern = f"cs:study:log:{username}:*"
+        while True:
+            cursor, keys = r.scan(cursor=cursor, match=pattern, count=100)
+            for key in keys:
+                raw = r.get(key)
+                if raw:
+                    try:
+                        logs.append(json.loads(raw))
+                    except Exception:
+                        pass
+            if cursor == 0:
+                break
+
+        if not logs:
+            return success_response({
+                "total_items": 0, "completed_items": 0,
+                "total_minutes": 0, "streak_days": 0,
+                "daily": [],
+            })
+
+        logs.sort(key=lambda x: x.get("date", ""))
+        total_seconds = sum(log.get("seconds", 0) for log in logs)
+        total_items = sum(log.get("count", 0) for log in logs)
+
+        # 计算连续打卡天数
+        dates = sorted(set(log.get("date", "") for log in logs if log.get("date")))
+        streak = 1 if dates else 0
+        for i in range(len(dates) - 1, 0, -1):
+            from datetime import date as _date
+            try:
+                d1 = _date.fromisoformat(dates[i])
+                d2 = _date.fromisoformat(dates[i - 1])
+                if (d1 - d2).days == 1:
+                    streak += 1
+                else:
+                    break
+            except Exception:
+                break
+
+        # 每日统计（最近 30 天）
+        daily = [{"date": log.get("date", ""), "count": log.get("count", 0), "seconds": log.get("seconds", 0)}
+                 for log in logs[-30:]]
+
+        return success_response({
+            "total_items": total_items,
+            "completed_items": 0,  # 由前端从 progress 计算
+            "total_minutes": round(total_seconds / 60, 1),
+            "streak_days": streak,
+            "daily": daily,
+        })
+    except Exception:
+        return success_response({
+            "total_items": 0, "completed_items": 0,
+            "total_minutes": 0, "streak_days": 0,
+            "daily": [],
+        })
 
 
 # ===================== v1.0 逐帧调试 API =====================

@@ -73,9 +73,11 @@ export const useTaskStore = defineStore('task', () => {
     if (data.video_path) task.videoPath = data.video_path
 
     // 任务结束时记录完成时间
+    // 注意：不在这里 _startNextTask()，因为下一个任务需要建立 SSE 连接，
+    // 而这个职责在 Sandbox.vue 的 _onQueueTaskDone() 中统一处理。
+    // 在此处 auto-promote 会导致任务变为 RUNNING 却没有 SSE 连接，永久卡死。
     if (data.state === 'SUCCESS' || data.state === 'FAILURE') {
       task.finishedAt = Date.now()
-      _startNextTask()
     }
 
     _persist()

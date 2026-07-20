@@ -50,5 +50,10 @@
       "default": true,
       "description": "是否高亮显示 left/mid/right 指针"
     }
-  ]
+  ],
+  "rating": 5.0,
+  "rating_count": 1,
+  "_ratings": {
+    "秦韶阳爸爸": 5
+  }
 }

@@ -1,0 +1,14 @@
+[     810ms] [WARNING] [Vue warn]: Failed to resolve component: Circle
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <StudyPath onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< undefined > key="/study" > 
+  at <BaseTransition mode="out-in" appear=false persisted=false  ... > 
+  at <Transition name="page" mode="out-in" > 
+  at <RouterView> 
+  at <App> @ http://localhost:5173/node_modules/.vite/deps/chunk-J5D6QMP7.js?v=b4a995ac:2225
+[   62677ms] [WARNING] [Vue warn]: Failed to resolve component: Circle
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <StudyPath onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< Proxy(Object) > key="/study" > 
+  at <BaseTransition mode="out-in" appear=false persisted=false  ... > 
+  at <Transition name="page" mode="out-in" > 
+  at <RouterView> 
+  at <App> @ http://localhost:5173/node_modules/.vite/deps/chunk-J5D6QMP7.js?v=b4a995ac:2225

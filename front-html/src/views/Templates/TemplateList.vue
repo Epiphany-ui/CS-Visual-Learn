@@ -40,7 +40,8 @@ onMounted(load)
         <p class="t-desc">{{ t.description }}</p>
         <div class="t-meta">
           <span class="t-diff" :class="'d-' + t.difficulty">{{ t.difficulty }}</span>
-          <span class="t-use">已使用 {{ t.use_count || 0 }} 次</span>
+          <span class="t-use">已使用 {{ t.use_count ?? 0 }} 次</span>
+          <span class="t-rating" v-if="t.rating_count">⭐ {{ t.rating.toFixed(1) }}</span>
         </div>
         <div class="t-tags">
           <el-tag v-for="tag in (t.tags || []).slice(0, 3)" :key="tag" size="small">{{ tag }}</el-tag>

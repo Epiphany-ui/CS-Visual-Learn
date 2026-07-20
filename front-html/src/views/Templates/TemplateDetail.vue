@@ -24,6 +24,11 @@ const formParams = reactive<Record<string, unknown>>({})
 let _tplProgressTimer: ReturnType<typeof setInterval> | null = null
 let _tplProgressTarget = 0
 
+// 评分相关
+const hoverStar = ref(0)
+const myRating = ref<number>(0)
+const ratingSubmitting = ref(false)
+
 function startTplProgress() {
   stopTplProgress()
   progress.value = 0
@@ -58,9 +63,47 @@ async function load() {
         formParams[p.name] = p.default
       }
     }
+    // 加载用户已有评分
+    loadMyRating()
   } catch {
     template.value = null
   } finally { loading.value = false }
+}
+
+async function loadMyRating() {
+  if (!username.value) return
+  try {
+    const res = await templatesApi.getMyRating(route.params.id as string)
+    myRating.value = res.data.data?.score || 0
+  } catch { /* 未登录或无评分，忽略 */ }
+}
+
+async function handleRate(score: number) {
+  if (ratingSubmitting.value) return
+  if (!username.value) {
+    ElMessage.warning('请先登录')
+    return
+  }
+  ratingSubmitting.value = true
+  try {
+    const rateRes = await templatesApi.rateTemplate(route.params.id as string, score)
+    // 后端非200时返回HTTP 200 + code≠0，需要检查业务状态码
+    if (rateRes.data.code !== 0 && rateRes.data.code !== 200) {
+      ElMessage.error(rateRes.data.message || '评分失败')
+      return
+    }
+    myRating.value = score
+    ElMessage.success('评分成功')
+    // 刷新模板数据以获取最新平均分
+    const res = await templatesApi.getDetail(route.params.id as string)
+    if (res.data.data) {
+      template.value = res.data.data
+    }
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || '评分失败')
+  } finally {
+    ratingSubmitting.value = false
+  }
 }
 
 async function handleGenerate() {
@@ -104,7 +147,7 @@ function saveToWorks() {
       <div class="tpl-meta glass-card">
         <div class="meta-item">
           <span class="meta-label">使用次数</span>
-          <span class="meta-value">{{ template.use_count || 128 }}</span>
+          <span class="meta-value">{{ template.use_count ?? 0 }}</span>
         </div>
         <div class="meta-item">
           <span class="meta-label">难度</span>
@@ -116,7 +159,20 @@ function saveToWorks() {
         </div>
         <div class="meta-item">
           <span class="meta-label">评分</span>
-          <span class="meta-value">⭐ {{ template.rating || '4.8' }}</span>
+          <span class="meta-value rating-row">
+            <span class="rating-stars" :class="{ disabled: ratingSubmitting }">
+              <span
+                v-for="s in 5" :key="s"
+                class="star"
+                :class="{ active: s <= (template.rating || 0), hover: s <= hoverStar, 'my-rating': s <= myRating }"
+                @click="handleRate(s)"
+                @mouseenter="hoverStar = s"
+                @mouseleave="hoverStar = 0"
+              >★</span>
+            </span>
+            <span class="rating-text">{{ (template.rating || 0).toFixed(1) }}</span>
+            <span class="rating-count" v-if="template.rating_count">({{ template.rating_count }}人)</span>
+          </span>
         </div>
       </div>
 
@@ -189,10 +245,27 @@ function saveToWorks() {
   gap: var(--space-xl);
   padding: var(--space-md) var(--space-lg);
   margin: var(--space-lg) 0;
+  flex-wrap: wrap;
 }
 .meta-item { display: flex; flex-direction: column; gap: 2px; }
 .meta-label { font-size: 0.75rem; color: var(--text-tertiary); }
 .meta-value { font-size: 0.95rem; font-weight: 600; color: var(--text-primary); }
+
+/* 评分样式 */
+.rating-row { display: flex; align-items: center; gap: 6px; flex-direction: row; }
+.rating-stars { display: flex; gap: 2px; cursor: pointer; }
+.rating-stars.disabled { pointer-events: none; opacity: 0.6; }
+.star {
+  font-size: 1.15rem;
+  color: var(--text-tertiary);
+  transition: color 0.15s, transform 0.15s;
+  user-select: none;
+}
+.star.active { color: #f59e0b; }
+.star.hover { color: #fbbf24; transform: scale(1.15); }
+.star.my-rating { color: #f59e0b; }
+.rating-text { font-size: 0.9rem; color: var(--text-primary); font-weight: 600; }
+.rating-count { font-size: 0.78rem; color: var(--text-tertiary); font-weight: 400; }
 
 .tpl-layout { display: grid; grid-template-columns: 400px 1fr; gap: var(--space-xl); margin-top: var(--space-xl); }
 .tpl-form { padding: var(--space-xl); }

@@ -28,6 +28,14 @@ javaClient.interceptors.request.use(config => {
   return config
 })
 
+pythonClient.interceptors.request.use(config => {
+  const token = localStorage.getItem('token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
 // 响应拦截器：统一错误提示
 const responseInterceptor = (response: any) => {
   const data = response.data
