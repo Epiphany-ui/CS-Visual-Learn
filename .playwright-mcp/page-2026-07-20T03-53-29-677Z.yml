@@ -1,0 +1,401 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - link "◆ CS Visual Learn" [ref=e6] [cursor=pointer]:
+        - /url: "#/"
+        - generic [ref=e7]: ◆
+        - generic [ref=e8]: CS Visual Learn
+      - navigation [ref=e9]:
+        - link [ref=e10] [cursor=pointer]:
+          - /url: "#/wiki"
+        - link [ref=e15] [cursor=pointer]:
+          - /url: "#/sandbox"
+        - link [ref=e19] [cursor=pointer]:
+          - /url: "#/templates"
+        - link [ref=e23] [cursor=pointer]:
+          - /url: "#/gallery"
+        - link [ref=e27] [cursor=pointer]:
+          - /url: "#/community"
+        - link [ref=e31] [cursor=pointer]:
+          - /url: "#/study"
+      - generic [ref=e36]:
+        - textbox "搜索知识点、动画、模板..." [ref=e44]
+        - button [ref=e45] [cursor=pointer]
+        - button "登录 / 注册" [ref=e49] [cursor=pointer]
+  - main [ref=e51]:
+    - generic [ref=e73]:
+      - generic [ref=e75]:
+        - heading "学习路径" [level=1] [ref=e76]
+        - paragraph [ref=e83]: 按路线逐个学习百科词条，理解后再生成动画巩固
+      - generic [ref=e85]:
+        - generic "点击查看详细报告" [ref=e86] [cursor=pointer]:
+          - generic [ref=e87]: 0/56
+          - generic [ref=e88]: 已完成知识点
+        - generic [ref=e92]:
+          - generic [ref=e93]: "7"
+          - generic [ref=e94]: 学习路线
+        - generic [ref=e95]:
+          - generic [ref=e96]: 0%
+          - generic [ref=e97]: 总体进度
+      - generic [ref=e206]:
+        - button "← 返回路径列表" [ref=e207] [cursor=pointer]
+        - generic [ref=e213]:
+          - heading "数据结构入门" [level=2] [ref=e214]
+          - paragraph [ref=e215]: 从线性表到高级树结构，逐个生成动画直观理解
+          - progressbar [ref=e217]:
+            - generic [ref=e220]: 0%
+        - generic [ref=e221]:
+          - generic [ref=e223]:
+            - generic [ref=e224]:
+              - generic [ref=e225]:
+                - heading "线性表" [level=4] [ref=e226]
+                - generic [ref=e227]: 最基础的数据组织方式
+              - generic [ref=e228]: 0/4 (0%)
+            - generic [ref=e229]:
+              - generic [ref=e230]:
+                - generic [ref=e233] [cursor=pointer]:
+                  - generic [ref=e234]: 栈 (Stack)
+                  - generic [ref=e235]:
+                    - generic [ref=e236]: 入门
+                    - generic [ref=e238]: ~15 分钟
+                - button [active] [ref=e239] [cursor=pointer]
+              - generic [ref=e245]:
+                - generic [ref=e248] [cursor=pointer]:
+                  - generic [ref=e249]: 队列 (Queue)
+                  - generic [ref=e250]:
+                    - generic [ref=e251]: 入门
+                    - generic [ref=e253]: ~15 分钟
+                - button [ref=e254] [cursor=pointer]
+              - generic [ref=e260]:
+                - generic [ref=e263] [cursor=pointer]:
+                  - generic [ref=e264]: 链表 (Linked List)
+                  - generic [ref=e265]:
+                    - generic [ref=e266]: 入门
+                    - generic [ref=e268]: ~20 分钟
+                - button [ref=e269] [cursor=pointer]
+              - generic [ref=e275]:
+                - generic [ref=e281]:
+                  - generic [ref=e282]: 哈希表 (Hash Table)
+                  - generic [ref=e283]:
+                    - generic [ref=e284]: 中等
+                    - generic [ref=e286]: ~25 分钟
+                - button [disabled] [ref=e287]
+          - generic [ref=e294]:
+            - generic [ref=e295]:
+              - generic [ref=e296]:
+                - heading "树结构" [level=4] [ref=e297]
+                - generic [ref=e298]: 层次化数据模型
+              - generic [ref=e299]: 0/3 (0%)
+            - generic [ref=e300]:
+              - generic [ref=e301]:
+                - generic [ref=e307]:
+                  - generic [ref=e308]: 二叉树 (Binary Tree)
+                  - generic [ref=e309]:
+                    - generic [ref=e310]: 中等
+                    - generic [ref=e312]: ~25 分钟
+                - button [disabled] [ref=e313]
+              - generic [ref=e319]:
+                - generic [ref=e325]:
+                  - generic [ref=e326]: 二叉搜索树 (BST)
+                  - generic [ref=e327]:
+                    - generic [ref=e328]: 中等
+                    - generic [ref=e330]: ~25 分钟
+                - button [disabled] [ref=e331]
+              - generic [ref=e337]:
+                - generic [ref=e343]:
+                  - generic [ref=e344]: 堆 (Heap)
+                  - generic [ref=e345]:
+                    - generic [ref=e346]: 中等
+                    - generic [ref=e348]: ~20 分钟
+                - button [disabled] [ref=e349]
+          - generic [ref=e356]:
+            - generic [ref=e357]:
+              - generic [ref=e358]:
+                - heading "高级树结构" [level=4] [ref=e359]
+                - generic [ref=e360]: 高效查找与存储
+              - generic [ref=e361]: 0/3 (0%)
+            - generic [ref=e362]:
+              - generic [ref=e363]:
+                - generic [ref=e369]:
+                  - generic [ref=e370]: AVL 树
+                  - generic [ref=e371]:
+                    - generic [ref=e372]: 困难
+                    - generic [ref=e374]: ~30 分钟
+                - button [disabled] [ref=e375]
+              - generic [ref=e381]:
+                - generic [ref=e387]:
+                  - generic [ref=e388]: 线段树 (Segment Tree)
+                  - generic [ref=e389]:
+                    - generic [ref=e390]: 困难
+                    - generic [ref=e392]: ~30 分钟
+                - button [disabled] [ref=e393]
+              - generic [ref=e399]:
+                - generic [ref=e402] [cursor=pointer]:
+                  - generic [ref=e403]: 字典树 (Trie)
+                  - generic [ref=e404]:
+                    - generic [ref=e405]: 中等
+                    - generic [ref=e407]: ~20 分钟
+                - button [ref=e408] [cursor=pointer]
+        - generic [ref=e414]:
+          - generic [ref=e415]:
+            - generic [ref=e416]:
+              - generic [ref=e421]: 栈
+              - generic [ref=e422]: 入门
+            - button [ref=e424] [cursor=pointer]
+          - generic [ref=e430]:
+            - heading "栈" [level=1] [ref=e431]
+            - heading "一、定义" [level=2] [ref=e432]
+            - paragraph [ref=e433]:
+              - text: 栈（Stack）是一种受限的线性数据结构，其核心特征是
+              - strong [ref=e434]: 后进先出
+              - text: （Last In, First Out, LIFO）。在栈中，所有元素的插入（入栈，Push）和删除（出栈，Pop）操作都只能在栈顶（Top）进行。栈底（Bottom）是固定的，不允许直接访问。
+            - paragraph [ref=e435]:
+              - text: 从抽象数据类型（ADT）的角度，栈可形式化定义为一个二元组
+              - code [ref=e436]: (S, op)
+              - text: ，其中
+              - code [ref=e437]: S
+              - text: 是元素集合，
+              - code [ref=e438]: op
+              - text: 是操作集合，主要包括：
+            - list [ref=e439]:
+              - listitem [ref=e440]:
+                - code [ref=e441]: Push(S, x)
+                - text: ": 将元素"
+                - code [ref=e442]: x
+                - text: 插入栈顶。
+              - listitem [ref=e443]:
+                - code [ref=e444]: Pop(S)
+                - text: ": 删除并返回栈顶元素。"
+              - listitem [ref=e445]:
+                - code [ref=e446]: Top(S)
+                - text: ": 返回栈顶元素但不删除。"
+              - listitem [ref=e447]:
+                - code [ref=e448]: IsEmpty(S)
+                - text: ": 判断栈是否为空。"
+            - paragraph [ref=e449]:
+              - text: 若用
+              - link "数组" [ref=e450] [cursor=pointer]:
+                - /url: "#/wiki/%E6%95%B0%E7%BB%84"
+              - text: 实现，栈的数学状态可用栈顶指针
+              - code [ref=e451]: top
+              - text: 描述：
+              - code [ref=e452]: top
+              - text: 指向当前栈顶元素的位置。初始时
+              - code [ref=e453]: top = -1
+              - text: 表示空栈。入栈时
+              - code [ref=e454]: top ← top + 1
+              - text: ，出栈时
+              - code [ref=e455]: top ← top - 1
+              - text: 。栈中元素个数为
+              - code [ref=e456]: top + 1
+              - text: 。
+            - heading "二、核心原理" [level=2] [ref=e457]
+            - list [ref=e458]:
+              - listitem [ref=e459]:
+                - paragraph [ref=e460]:
+                  - strong [ref=e461]: LIFO 机制
+                  - text: ：栈的核心思想是“后进先出”。最后进入栈的元素总是最先被取出。这一特性使得栈天然适合处理需要“回溯”或“撤销”的场景，如函数调用、括号匹配、表达式求值等。
+              - listitem [ref=e462]:
+                - paragraph [ref=e463]:
+                  - strong [ref=e464]: 单端操作
+                  - text: ：所有操作（插入、删除、读取）均限定在栈顶。这意味着栈无法像数组或
+                  - link "链表" [ref=e465] [cursor=pointer]:
+                    - /url: "#/wiki/linked-list"
+                  - text: 那样随机访问中间元素。这种限制虽然降低了灵活性，但换来了操作的高效性和确定性。
+              - listitem [ref=e466]:
+                - paragraph [ref=e467]:
+                  - strong [ref=e468]: 栈顶指针
+                  - text: ：在数组实现中，栈顶指针
+                  - code [ref=e469]: top
+                  - text: 是核心状态变量。它记录了当前栈中元素的数量和位置。入栈时
+                  - code [ref=e470]: top
+                  - text: 增加，出栈时
+                  - code [ref=e471]: top
+                  - text: 减少。当
+                  - code [ref=e472]: top = -1
+                  - text: 时栈空，当
+                  - code [ref=e473]: top = MAX_SIZE - 1
+                  - text: 时栈满（若容量固定）。
+              - listitem [ref=e474]:
+                - paragraph [ref=e475]:
+                  - strong [ref=e476]: 递归与栈的等价性
+                  - text: ：任何递归算法都可以用栈来模拟。递归调用本质上是系统隐式维护了一个“调用栈”，每次函数调用将返回地址和局部变量压栈，返回时出栈。因此，栈是理解递归、
+                  - link "深度优先搜索" [ref=e477] [cursor=pointer]:
+                    - /url: "#/wiki/dfs"
+                  - text: （DFS）等算法的基础。
+              - listitem [ref=e478]:
+                - paragraph [ref=e479]:
+                  - strong [ref=e480]: 栈的两种实现
+                  - text: ：栈可以用数组（顺序栈）或链表（链栈）实现。顺序栈访问快但容量固定；链栈动态扩容但需额外指针空间。两者在逻辑上完全等价，仅实现细节不同。
+            - heading "三、过程/示例" [level=2] [ref=e481]
+            - paragraph [ref=e482]:
+              - text: 以括号匹配问题为例：检查
+              - link "字符串" [ref=e483] [cursor=pointer]:
+                - /url: "#/wiki/%E5%AD%97%E7%AC%A6%E4%B8%B2"
+              - code [ref=e484]: "\"({[]})\""
+              - text: 中的括号是否匹配。
+            - paragraph [ref=e485]:
+              - strong [ref=e486]: 步骤演示
+              - text: （栈初始为空，
+              - code [ref=e487]: top = -1
+              - text: ）：
+            - list [ref=e488]:
+              - listitem [ref=e489]:
+                - text: 读取
+                - code [ref=e490]: "'('"
+                - text: ：栈空，入栈。栈内容：
+                - code [ref=e491]: "[ '(' ]"
+                - text: ，
+                - code [ref=e492]: top = 0
+                - text: 。
+              - listitem [ref=e493]:
+                - text: 读取
+                - code [ref=e494]: "'{'"
+                - text: ：栈顶为
+                - code [ref=e495]: "'('"
+                - text: ，不是匹配对，入栈。栈内容：
+                - code [ref=e496]: "[ '(', '{' ]"
+                - text: ，
+                - code [ref=e497]: top = 1
+                - text: 。
+              - listitem [ref=e498]:
+                - text: 读取
+                - code [ref=e499]: "'['"
+                - text: ：栈顶为
+                - code [ref=e500]: "'{'"
+                - text: ，入栈。栈内容：
+                - code [ref=e501]: "[ '(', '{', '[' ]"
+                - text: ，
+                - code [ref=e502]: top = 2
+                - text: 。
+              - listitem [ref=e503]:
+                - text: 读取
+                - code [ref=e504]: "']'"
+                - text: ：栈顶为
+                - code [ref=e505]: "'['"
+                - text: ，匹配，出栈。栈内容：
+                - code [ref=e506]: "[ '(', '{' ]"
+                - text: ，
+                - code [ref=e507]: top = 1
+                - text: 。
+              - listitem [ref=e508]:
+                - text: 读取
+                - code [ref=e509]: "'}'"
+                - text: ：栈顶为
+                - code [ref=e510]: "'{'"
+                - text: ，匹配，出栈。栈内容：
+                - code [ref=e511]: "[ '(' ]"
+                - text: ，
+                - code [ref=e512]: top = 0
+                - text: 。
+              - listitem [ref=e513]:
+                - text: 读取
+                - code [ref=e514]: "')'"
+                - text: ：栈顶为
+                - code [ref=e515]: "'('"
+                - text: ，匹配，出栈。栈内容：
+                - code [ref=e516]: "[]"
+                - text: ，
+                - code [ref=e517]: top = -1
+                - text: 。
+              - listitem [ref=e518]: 字符串遍历结束，栈为空，匹配成功。
+            - paragraph [ref=e519]:
+              - text: 若输入为
+              - code [ref=e520]: "\"({[})\""
+              - text: ，则在第5步读取
+              - code [ref=e521]: "'}'"
+              - text: 时，栈顶为
+              - code [ref=e522]: "'['"
+              - text: ，不匹配，立即报错。该过程展示了栈如何通过 LIFO 特性确保括号的嵌套顺序正确。
+            - heading "四、复杂度/性质分析" [level=2] [ref=e523]
+            - list [ref=e524]:
+              - listitem [ref=e525]:
+                - paragraph [ref=e526]:
+                  - strong [ref=e527]: 时间复杂度
+                  - text: ：
+                - list [ref=e528]:
+                  - listitem [ref=e529]:
+                    - text: 入栈（Push）、出栈（Pop）、取栈顶（Top）、判空（IsEmpty）：均为
+                    - strong [ref=e530]: O(1)
+                    - text: ，即常数时间。这是栈最突出的优势——所有基本操作与栈中元素个数无关。
+                  - listitem [ref=e531]: 注意：若栈用动态数组实现，当容量不足时需扩容（通常翻倍），此时单次 Push 可能为 O(n)，但均摊后仍为 O(1)。
+              - listitem [ref=e532]:
+                - paragraph [ref=e533]:
+                  - strong [ref=e534]: 空间复杂度
+                  - text: ：
+                - list [ref=e535]:
+                  - listitem [ref=e536]: 顺序栈：O(n)，其中 n 为栈的最大容量（或当前元素个数）。
+                  - listitem [ref=e537]: 链栈：O(n)，每个节点额外存储指针，常数因子略大。
+              - listitem [ref=e538]:
+                - paragraph [ref=e539]:
+                  - strong [ref=e540]: 稳定性
+                  - text: ：栈的操作不涉及元素比较或交换，因此“稳定性”概念不适用。但若从元素相对顺序看，栈的 LIFO 特性会反转元素顺序（先入栈的后出栈），这与
+                  - link "队列" [ref=e541] [cursor=pointer]:
+                    - /url: "#/wiki/queue"
+                  - text: 的 FIFO 形成对比。
+              - listitem [ref=e542]:
+                - paragraph [ref=e543]:
+                  - strong [ref=e544]: 收敛性
+                  - text: ：栈本身不涉及迭代或数值逼近，无收敛性问题。但在某些算法（如深度优先搜索）中，栈的深度决定了递归或搜索的深度，若栈空间不足可能导致栈溢出（Stack Overflow）。
+            - heading "五、常见误区" [level=2] [ref=e545]
+            - list [ref=e546]:
+              - listitem [ref=e547]:
+                - paragraph [ref=e548]:
+                  - strong [ref=e549]: 混淆栈与队列
+                  - text: ：栈是 LIFO（后进先出），队列是 FIFO（先进先出）。初学者常将两者混用，尤其在实现 BFS 和 DFS 时。记住：DFS 用栈（或递归），BFS 用队列。
+              - listitem [ref=e550]:
+                - paragraph [ref=e551]:
+                  - strong [ref=e552]: 误认为栈可以随机访问
+                  - text: ：栈只允许访问栈顶元素。试图通过下标访问栈中其他元素（如
+                  - code [ref=e553]: stack[2]
+                  - text: ）是错误用法，违背栈的抽象定义。若需随机访问，应使用数组或列表。
+              - listitem [ref=e554]:
+                - paragraph [ref=e555]:
+                  - strong [ref=e556]: 栈溢出与内存泄漏混淆
+                  - text: ：栈溢出（Stack Overflow）通常指递归过深或局部变量过多导致系统调用栈空间耗尽，是运行时错误。而内存泄漏是
+                  - link "堆" [ref=e557] [cursor=pointer]:
+                    - /url: "#/wiki/heap"
+                  - text: 内存未释放。两者机制不同，但初学者常混为一谈。
+              - listitem [ref=e558]:
+                - paragraph [ref=e559]:
+                  - strong [ref=e560]: 忽视栈顶指针的边界条件
+                  - text: ：在数组实现中，出栈前必须检查栈是否为空（
+                  - code [ref=e561]: top >= 0
+                  - text: ），入栈前必须检查栈是否已满（
+                  - code [ref=e562]: top < MAX_SIZE - 1
+                  - text: ）。忽略边界检查会导致数组越界或数据丢失。
+              - listitem [ref=e563]:
+                - paragraph [ref=e564]:
+                  - strong [ref=e565]: 认为栈只能用于基本类型
+                  - text: ：栈可以存储任意类型的数据，包括结构体、对象、函数指针等。在编译器中，栈用于存储函数调用帧（包含局部变量、返回地址等），这是栈在系统编程中的核心应用。
+          - generic [ref=e566]:
+            - button [ref=e567] [cursor=pointer]
+            - button [ref=e573] [cursor=pointer]
+  - contentinfo [ref=e52]:
+    - generic [ref=e53]:
+      - generic [ref=e54]:
+        - text: ◆ CS Visual Learn
+        - paragraph [ref=e55]: 让每一个抽象概念都有对应的直观动画，让知识看得见。
+      - generic [ref=e56]:
+        - generic [ref=e57]:
+          - heading "学习" [level=4] [ref=e58]
+          - link "知识百科" [ref=e59] [cursor=pointer]:
+            - /url: "#/wiki"
+          - link "模板库" [ref=e60] [cursor=pointer]:
+            - /url: "#/templates"
+          - link "备考路径" [ref=e61] [cursor=pointer]:
+            - /url: "#/study"
+        - generic [ref=e62]:
+          - heading "创作" [level=4] [ref=e63]
+          - link "动画沙箱" [ref=e64] [cursor=pointer]:
+            - /url: "#/sandbox"
+          - link "精选画廊" [ref=e65] [cursor=pointer]:
+            - /url: "#/gallery"
+          - link "社区" [ref=e66] [cursor=pointer]:
+            - /url: "#/community"
+        - generic [ref=e67]:
+          - heading "关于" [level=4] [ref=e68]
+          - generic [ref=e69]: 关于我们
+          - generic [ref=e70]: 帮助文档
+          - generic [ref=e71]: 反馈建议
+    - generic [ref=e72]: © 2026 CS Visual Learn. Powered by Manim + DeepSeek.

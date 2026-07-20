@@ -35,4 +35,14 @@ export const templatesApi = {
       params,
     })
   },
+
+  /** 对模板评分 (1-5) */
+  rateTemplate(templateId: string, score: number) {
+    return pythonClient.post<ApiResponse<null>>(`/api/templates/${templateId}/rate`, { score })
+  },
+
+  /** 获取当前用户对模板的已有评分 */
+  getMyRating(templateId: string) {
+    return pythonClient.get<ApiResponse<{ score: number | null }>>(`/api/templates/${templateId}/my-rating`)
+  },
 }

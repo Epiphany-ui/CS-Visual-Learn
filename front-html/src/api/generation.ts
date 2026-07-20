@@ -68,4 +68,17 @@ export const generationApi = {
       username: username || undefined,
     })
   },
+
+  /** 查询异步任务状态（SSE 断连后的兜底轮询） */
+  getTaskStatus(taskId: string) {
+    return pythonClient.get<ApiResponse<{
+      task_id: string
+      state: string
+      progress: number
+      message: string
+      video_path: string
+      log: string
+      code?: string
+    }>>(`/api/tasks/${taskId}`)
+  },
 }

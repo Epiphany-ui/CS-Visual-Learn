@@ -19,6 +19,8 @@ export interface TemplateInfo {
   difficulty: string
   cover: string
   use_count: number
+  rating: number
+  rating_count: number
   params?: TemplateParam[]
 }
 

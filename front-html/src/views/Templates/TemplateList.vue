@@ -32,7 +32,7 @@ onMounted(load)
   <div class="templates-page">
     <PageHeader title="模板库" description="零代码创作动画，选择模板填写参数即刻生成" icon="Tickets" />
 
-    <div class="template-grid" v-loading="loading">
+    <div class="template-grid stagger-cards" v-loading="loading">
       <RevealOnScroll v-for="t in items" :key="t.id" as-child>
       <div class="t-card glass-card" @click="goDetail(t.id)">
         <div class="t-category">{{ t.category }}</div>
@@ -40,7 +40,8 @@ onMounted(load)
         <p class="t-desc">{{ t.description }}</p>
         <div class="t-meta">
           <span class="t-diff" :class="'d-' + t.difficulty">{{ t.difficulty }}</span>
-          <span class="t-use">已使用 {{ t.use_count || 0 }} 次</span>
+          <span class="t-use">已使用 {{ t.use_count ?? 0 }} 次</span>
+          <span class="t-rating" v-if="t.rating_count">⭐ {{ t.rating.toFixed(1) }}</span>
         </div>
         <div class="t-tags">
           <el-tag v-for="tag in (t.tags || []).slice(0, 3)" :key="tag" size="small">{{ tag }}</el-tag>

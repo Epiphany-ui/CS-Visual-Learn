@@ -40,6 +40,7 @@ let _aiChanging = false   // 标记正在由 AI 修改代码（触发 typewriter
 let _progressTimer: ReturnType<typeof setInterval> | null = null
 let _progressTarget = 0
 let _taskCompleted = false // 防止 onerror 覆盖已完成的结果
+let _recoveryAttempts = 0  // 防止无限重连循环
 let _nextTaskTimer: ReturnType<typeof setTimeout> | null = null // 自动启动下一个任务的定时器
 
 // ========== Canvas Typewriter 画笔写入效果 ==========
@@ -75,13 +76,13 @@ function saveState() {
       progressMsg: progressMsg.value,
       activeTaskId: _activeTaskId,
     }
-    sessionStorage.setItem(STATE_KEY.value, JSON.stringify(state))
+    localStorage.setItem(STATE_KEY.value, JSON.stringify(state))
   } catch { /* ignore */ }
 }
 
 function restoreState() {
   try {
-    const raw = sessionStorage.getItem(STATE_KEY.value)
+    const raw = localStorage.getItem(STATE_KEY.value)
     if (!raw) return
     const state = JSON.parse(raw)
     requirement.value = state.requirement || ''
@@ -91,6 +92,9 @@ function restoreState() {
     currentFilename.value = state.currentFilename || ''
     savedToGallery.value = state.savedToGallery || false
     logOutput.value = state.logOutput || ''
+    _activeTaskId = state.activeTaskId || ''
+    progress.value = state.progress || 0
+    progressMsg.value = state.progressMsg || ''
   } catch { /* ignore */ }
 }
 
@@ -154,8 +158,62 @@ function onSSEEvent(evt: SSETaskEvent) {
 
 function onSSEError() {
   if (_taskCompleted) return // SSE 关闭触发的 onerror，忽略
+  // SSE 连接彻底失败（重试次数耗尽），不要直接放弃——
+  // _connectTaskSSE 里的错误回调会先尝试兜底轮询
   stopSmoothProgress()
   generating.value = false
+}
+
+// SSE 断连后兜底：轮询一次服务器确认任务真实状态
+async function _pollAndRecoverTask(taskId: string) {
+  if (_taskCompleted) return
+  _recoveryAttempts++
+  if (_recoveryAttempts > 5) {
+    // 5 次恢复尝试均失败 → 放弃
+    taskStore.updateTaskProgress(taskId, { state: 'FAILURE', message: '多次恢复失败，任务已中止' })
+    onSSEError()
+    _onQueueTaskDone(taskId, false)
+    return
+  }
+  try {
+    const res = await generationApi.getTaskStatus(taskId)
+    const data = res.data.data
+    if (!data) { onSSEError(); return }
+
+    const state = data.state
+    if (state === 'SUCCESS' || state === 'FAILURE') {
+      // 任务其实已经完成了！只是 SSE 没收到事件
+      taskStore.updateTaskProgress(taskId, {
+        state: state as 'SUCCESS' | 'FAILURE',
+        progress: state === 'SUCCESS' ? 100 : (data.progress || 0),
+        message: state === 'SUCCESS' ? '已完成（后台恢复）' : '任务失败',
+        video_path: data.video_path || '',
+      })
+      if (data.video_path) {
+        videoPath.value = data.video_path
+        videoUrl.value = data.video_path
+        currentFilename.value = data.video_path.replace('/videos/', '')
+      }
+      if (data.log) logOutput.value += data.log + '\n'
+      if ((data as any).code) { _aiChanging = true; code.value = (data as any).code }
+      onTaskDone(state === 'SUCCESS')
+      _onQueueTaskDone(taskId, state === 'SUCCESS')
+    } else if (state === 'RUNNING' || state === 'PENDING' || state === 'STARTED' || state === 'PROGRESS') {
+      // 任务还在运行 → 重新连接 SSE
+      progressMsg.value = '连接恢复中...'
+      _connectTaskSSE(taskId)
+    } else {
+      // UNKNOWN 或其他状态 → 标记失败让队列继续
+      taskStore.updateTaskProgress(taskId, { state: 'FAILURE', message: '连接丢失且无法恢复' })
+      onSSEError()
+      _onQueueTaskDone(taskId, false)
+    }
+  } catch {
+    // 网络也不通 → 放弃，标记失败
+    taskStore.updateTaskProgress(taskId, { state: 'FAILURE', message: '连接丢失' })
+    onSSEError()
+    _onQueueTaskDone(taskId, false)
+  }
 }
 
 // --- 恢复 ---
@@ -165,10 +223,10 @@ function restoreTaskFromSession() {
 
   // 从队列中找这个任务
   const cached = taskStore.queue.find(t => t.taskId === tid)
-  // 从 sessionStorage 恢复进度（比 Pinia store 更准确）
+  // 从 localStorage 恢复进度
   let savedProgress = 0
   try {
-    const raw = sessionStorage.getItem(STATE_KEY.value)
+    const raw = localStorage.getItem(STATE_KEY.value)
     if (raw) {
       const state = JSON.parse(raw)
       savedProgress = state.progress || 0
@@ -243,6 +301,7 @@ async function handleCancelTask() {
     disconnect()
     stopSmoothProgress()
     generating.value = false
+    _recoveryAttempts = 0
     progressMsg.value = '任务已取消'
     // 尝试通知后端取消 Celery 任务
     await fetch(`${PY_BASE}/api/tasks/${_activeTaskId}`, { method: 'DELETE' }).catch(() => {})
@@ -304,6 +363,10 @@ async function handlePublish() {
     const data = await res.json()
     if (data.code === 200) {
       publishDialogVisible.value = false
+      // 发布到社区 = 自动设为公开
+      if (currentFilename.value) {
+        videosApi.togglePublic(currentFilename.value).catch(() => {})
+      }
       // 如果勾选了发布到画廊，同步收藏
       if (publishToGallery.value && currentFilename.value) {
         videosApi.saveVideo(currentFilename.value, username.value).then(() => {
@@ -365,6 +428,7 @@ async function startAsyncTask(apiCall: () => Promise<any>, options?: { title?: s
 // 建立单个任务的 SSE 连接
 function _connectTaskSSE(taskId: string) {
   _activeTaskId = taskId
+  _recoveryAttempts = 0  // 新连接 → 重置恢复计数
   localStorage.setItem('cs:active-task', taskId)
   taskStore.markTaskRunning(taskId)
 
@@ -386,8 +450,9 @@ function _connectTaskSSE(taskId: string) {
       onSSEEvent(data as SSETaskEvent)
     }
   }, () => {
+    // SSE 连接彻底失败（重试次数耗尽）→ 兜底轮询确认任务真实状态
     if (taskId === _activeTaskId) {
-      onSSEError()
+      _pollAndRecoverTask(taskId)
     }
   })
 }
@@ -405,10 +470,11 @@ function _onQueueTaskDone(taskId: string, success: boolean) {
     _nextTaskTimer = null
   }
 
-  // 找下一个排队的任务（最早提交的）
+  // 找下一个排队任务，显式提升为 RUNNING 并连接 SSE
+  // （不在 updateTaskProgress 里 auto-promote，否则任务变 RUNNING 却没有 SSE 连接）
   const next = taskStore.nextPendingTask
   if (next) {
-    // 延迟一下再启动，给用户感知
+    taskStore.markTaskRunning(next.taskId)
     _nextTaskTimer = setTimeout(() => {
       _connectTaskSSE(next.taskId)
       generating.value = true
@@ -453,30 +519,41 @@ onMounted(() => {
   // 恢复任务队列
   taskStore.restore()
 
-  // Fork 过来的代码
+  // 先恢复上一次的沙箱状态
+  restoreState()
+  restoreTaskFromSession()
+
+  // Fork 过来的代码 → 覆盖 code
   const forkedCode = sessionStorage.getItem('cs:forked-code')
   if (forkedCode) {
     code.value = forkedCode
     sessionStorage.removeItem('cs:forked-code')
-    return
   }
 
-  const prompt = route.query.prompt as string
-  if (prompt) {
-    // 从百科/首页跳转过来 → 全新任务，自动开始生成
-    requirement.value = prompt
-    code.value = ''
+  // 从模板库"进阶编辑"跳转 → 已有代码，只需设置标题
+  if (route.query.template && forkedCode) {
+    requirement.value = `模板创作: ${route.query.template}`
     videoUrl.value = ''
     videoPath.value = ''
     currentFilename.value = ''
     logOutput.value = ''
     typingActive.value = false
     localStorage.removeItem('cs:active-task')
-    nextTick(() => handleGenerate())
+    // 不自动生成——用户先审查代码再手动渲染
   } else {
-    // 正常导航返回 → 恢复之前的状态
-    restoreState()
-    restoreTaskFromSession()
+    // 从百科/学习路径跳转过来 → 全新任务，自动开始生成
+    const prompt = route.query.prompt as string
+    if (prompt) {
+      requirement.value = prompt
+      code.value = ''
+      videoUrl.value = ''
+      videoPath.value = ''
+      currentFilename.value = ''
+      logOutput.value = ''
+      typingActive.value = false
+      localStorage.removeItem('cs:active-task')
+      nextTick(() => handleGenerate())
+    }
   }
 })
 
@@ -502,6 +579,14 @@ watch(
   }
 )
 
+// 自动保存：code、requirement、videoUrl 变化时即时持久化
+let _autoSaveTimer: ReturnType<typeof setTimeout> | null = null
+function autoSave() {
+  if (_autoSaveTimer) clearTimeout(_autoSaveTimer)
+  _autoSaveTimer = setTimeout(() => saveState(), 500)
+}
+watch([code, requirement, videoUrl], autoSave)
+
 onUnmounted(() => {
   disconnect()
   stopSmoothProgress()
@@ -509,6 +594,7 @@ onUnmounted(() => {
     clearTimeout(_nextTaskTimer)
     _nextTaskTimer = null
   }
+  if (_autoSaveTimer) clearTimeout(_autoSaveTimer)
   saveState()
 })
 </script>

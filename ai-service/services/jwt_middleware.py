@@ -40,8 +40,8 @@ class JwtUserMiddleware(BaseHTTPMiddleware):
         if auth.startswith("Bearer "):
             token = auth[7:]
             try:
-                payload = _jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
-                request.state.username = payload.get("username", "")
+                payload = _jwt.decode(token, settings.jwt_secret, algorithms=["HS256", "HS384", "HS512"])
+                request.state.username = payload.get("sub", "")
             except Exception:
                 pass  # token 无效，继续处理（端点自行决定是否拒绝）
 
