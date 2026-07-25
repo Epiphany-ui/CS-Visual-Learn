@@ -634,7 +634,7 @@ onUnmounted(() => {
             placeholder="描述你想要的动画效果...&#10;&#10;例如：&#10;• 冒泡排序算法可视化&#10;• 傅里叶级数分解方波动画" class="req-input" />
           <div class="quick-prompts">
             <span class="qp-label">快速模板：</span>
-            <el-tag v-for="t in ['快速排序','Dijkstra算法','傅里叶变换','正态分布','二叉树遍历']" :key="t"
+            <el-tag v-for="t in ['快速排序','Dijkstra算法','傅里叶变换','正态分布','二叉树遍历','矩阵旋转','Floyd算法','二分查找','链表','傅里叶级数']" :key="t"
               size="small" class="qp-tag" @click="requirement = t + '动画可视化'">{{ t }}</el-tag>
           </div>
         </div>
