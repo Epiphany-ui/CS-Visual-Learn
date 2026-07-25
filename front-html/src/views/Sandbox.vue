@@ -611,10 +611,28 @@ onMounted(() => {
   restoreState()
   restoreTaskFromSession()
 
-  // Fork 过来的代码 → 覆盖 code
+  // Fork 过来的代码 → 无条件覆盖旧状态
   const forkedCode = sessionStorage.getItem('cs:forked-code')
   if (forkedCode) {
+    // 停止旧任务，清空所有旧状态（恢复的视频/描述/进度）
+    disconnect()
+    stopSmoothProgress()
+    generating.value = false
+    videoUrl.value = ''
+    videoPath.value = ''
+    currentFilename.value = ''
+    logOutput.value = ''
+    typingActive.value = false
+    progress.value = 0
+    progressMsg.value = ''
+    savedToGallery.value = false
+    requirement.value = ''
+    studyWikiSlug.value = ''
+    studyPathId.value = ''
+    localStorage.removeItem('cs:active-task')
+    // 覆盖代码，切换到高级模式
     code.value = forkedCode
+    sandboxMode.value = 'advanced'
     sessionStorage.removeItem('cs:forked-code')
     // cs:fork-source-id 留在 sessionStorage，publish 时使用
   } else {
