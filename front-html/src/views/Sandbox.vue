@@ -621,11 +621,14 @@ onMounted(() => {
   _isStateRestored.value = true
 
   // ========== 下面处理跳转参数，必须等状态恢复完再处理 ==========
-  // 处理Fork参数：只有真的是新的Fork（session里有forkedCode，且当前没有恢复出代码/视频）才清空覆盖
+  // 处理Fork参数：Fork优先级最高，只要session里有forkedCode就无条件覆盖
   const forkedCode = sessionStorage.getItem('cs:forked-code')
-  if (forkedCode && !code.value && !videoUrl.value) {
-    code.value = forkedCode
-    sandboxMode.value = 'advanced'  // Fork 后自动切高级模式，方便看代码
+  if (forkedCode) {
+    // 停止当前所有生成任务
+    disconnect()
+    stopSmoothProgress()
+    generating.value = false
+    // 清空旧状态
     videoUrl.value = ''
     videoPath.value = ''
     currentFilename.value = ''
@@ -634,9 +637,15 @@ onMounted(() => {
     progress.value = 0
     progressMsg.value = ''
     savedToGallery.value = false
-    generating.value = false
     localStorage.removeItem('cs:active-task')
+    // Fork 代码覆盖
+    code.value = forkedCode
+    sandboxMode.value = 'advanced'
+    // 清空旧需求描述和来源标签
     requirement.value = ''
+    studyWikiSlug.value = ''
+    studyPathId.value = ''
+    // 删掉 forkedCode 避免刷新重复覆盖，保留 cs:fork-source-id 给发布用
     sessionStorage.removeItem('cs:forked-code')
   } else {
     sessionStorage.removeItem('cs:fork-source-id')
