@@ -611,10 +611,23 @@ onMounted(() => {
   restoreState()
   restoreTaskFromSession()
 
-  // Fork 过来的代码 → 覆盖 code
+  // Fork 过来的代码 → 覆盖 code，同时清空旧状态
   const forkedCode = sessionStorage.getItem('cs:forked-code')
   if (forkedCode) {
     code.value = forkedCode
+    // 清空旧视频/日志，让用户看到的是干净的 Fork 环境
+    videoUrl.value = ''
+    videoPath.value = ''
+    currentFilename.value = ''
+    logOutput.value = ''
+    typingActive.value = false
+    progress.value = 0
+    progressMsg.value = ''
+    savedToGallery.value = false
+    generating.value = false
+    localStorage.removeItem('cs:active-task')
+    // Fork 时清空旧 prompt，让用户基于代码重新创作
+    requirement.value = ''
     sessionStorage.removeItem('cs:forked-code')
     // cs:fork-source-id 留在 sessionStorage，publish 时使用
   } else {
