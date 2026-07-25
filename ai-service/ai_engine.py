@@ -47,8 +47,8 @@ def _init_config():
     EMBEDDING_MODEL_NAME = _cfg.embedding_model_name
 
 DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
-LLM_TEMPERATURE: float = 0.1
-LLM_TOP_P: float = 0.85
+LLM_TEMPERATURE: float = 0.25
+LLM_TOP_P: float = 0.9
 API_REQUEST_TIMEOUT: tuple = (10, 120)
 
 # ===================== 业务常量配置 =====================
