@@ -75,6 +75,9 @@ function handleLogout() {
 
       <!-- 导航 -->
       <nav class="nav-links">
+        <router-link to="/" class="nav-link" active-class="nav-active">
+          <el-icon><HomeFilled /></el-icon> 首页
+        </router-link>
         <router-link to="/community" class="nav-link" active-class="nav-active">
           <el-icon><View /></el-icon> 发现
         </router-link>

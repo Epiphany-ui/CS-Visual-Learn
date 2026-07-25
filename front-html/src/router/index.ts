@@ -7,10 +7,6 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      redirect: '/community',
-    },
-    {
-      path: '/home',
       name: 'home',
       component: () => import('@/views/Home.vue'),
       meta: { title: '首页' },
@@ -110,7 +106,7 @@ router.beforeEach((to) => {
 
   // 已登录用户访问游客页面（如登录页） → 跳转首页
   if (to.meta.guest && userStore.isLoggedIn) {
-    return { name: 'community' }
+    return { name: 'home' }
   }
 })
 
