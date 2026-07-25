@@ -61,15 +61,18 @@ function toggleSandboxMode() {
   localStorage.setItem('cs:sandbox-mode', sandboxMode.value)
 }
 
-// 简易模式：生成时附带选项参数
+// 简易模式：生成时附带选项参数（纯前端拼字符串，不改后端）
 function buildSimplePrompt(base: string): string {
   const parts = [base]
-  if (animSpeed.value === 'slow') parts.push('动画速度放慢')
-  else if (animSpeed.value === 'fast') parts.push('动画速度加快')
-  if (colorTheme.value === 'light') parts.push('使用浅色主题')
-  else if (colorTheme.value === 'neon') parts.push('使用霓虹色彩主题')
-  if (showFormulaLabel.value) parts.push('显示公式标注')
-  return parts.join('，')
+  // 速度
+  if (animSpeed.value === 'slow') parts.push('动画播放速度较慢，细节清晰')
+  else if (animSpeed.value === 'fast') parts.push('动画播放速度较快，流畅展示')
+  // 主题
+  if (colorTheme.value === 'light') parts.push('白色浅色背景')
+  else if (colorTheme.value === 'neon') parts.push('霓虹赛博朋克配色，高对比度')
+  // 公式标注
+  if (showFormulaLabel.value) parts.push('在动画关键位置标注对应的 LaTeX 数学公式')
+  return parts.join('。')
 }
 
 const inputPlaceholder = computed(() => {
@@ -691,7 +694,7 @@ onUnmounted(() => {
             {{ sandboxMode === 'simple' ? '🎨 简易模式' : '🔧 高级模式' }}
           </el-button>
         </div>
-        <el-select v-if="sandboxMode === 'advanced'" v-model="renderQuality" size="small" style="width:110px" @change="(v: string) => localStorage.setItem('cs:render-quality', v)">
+        <el-select v-show="sandboxMode === 'advanced'" v-model="renderQuality" size="small" style="width:110px" @change="(v: string) => localStorage.setItem('cs:render-quality', v)">
           <el-option label="⚡ 480p" value="-ql" />
           <el-option label="🎯 720p" value="-qm" />
           <el-option label="✨ 1080p" value="-qh" />
@@ -738,7 +741,7 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <div v-if="sandboxMode === 'advanced'" class="sb-panel panel-code">
+      <div v-show="sandboxMode === 'advanced'" class="sb-panel panel-code">
         <div class="panel-header">
           <el-icon><Document /></el-icon> Manim 代码
           <el-button link size="small" :loading="fixing" @click="handleFixCode" style="margin-left:auto">
@@ -806,7 +809,7 @@ onUnmounted(() => {
             </div>
           </div>
         </div>
-        <ParamPanel v-if="sandboxMode === 'advanced'" :code="code" @update:code="(v: string) => { code = v }" @render="handleRender" />
+        <ParamPanel v-show="sandboxMode === 'advanced'" :code="code" @update:code="(v: string) => { code = v }" @render="handleRender" />
         <TaskQueue @load-task="loadTaskFromQueue" />
         <div v-if="logOutput" class="log-section">
           <div class="panel-header"><el-icon><Document /></el-icon> 渲染日志</div>

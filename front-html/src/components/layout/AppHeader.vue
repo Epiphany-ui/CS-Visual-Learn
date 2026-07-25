@@ -81,8 +81,17 @@ function handleLogout() {
         <router-link to="/sandbox" class="nav-link" active-class="nav-active">
           <el-icon><EditPen /></el-icon> 创作
         </router-link>
+        <router-link to="/wiki" class="nav-link" active-class="nav-active">
+          <el-icon><Collection /></el-icon> 百科
+        </router-link>
+        <router-link to="/templates" class="nav-link" active-class="nav-active">
+          <el-icon><Tickets /></el-icon> 模板
+        </router-link>
+        <router-link to="/gallery" class="nav-link" active-class="nav-active">
+          <el-icon><PictureFilled /></el-icon> 画廊
+        </router-link>
         <router-link to="/study" class="nav-link" active-class="nav-active">
-          <el-icon><Collection /></el-icon> 知识合集
+          <el-icon><Guide /></el-icon> 知识合集
         </router-link>
       </nav>
 
