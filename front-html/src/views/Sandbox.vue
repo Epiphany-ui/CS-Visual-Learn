@@ -164,11 +164,12 @@ function restoreState() {
     _activeTaskId = state.activeTaskId || ''
     progress.value = state.progress || 0
     progressMsg.value = state.progressMsg || ''
-    // 恢复生成状态（进度<100说明任务还在跑，保持generating=true）
+    // 恢复生成状态（进度<100说明任务还在跑，保持generating=true并重启进度条动画）
     if (progress.value >= 100) {
       generating.value = false
     } else if ((state as any).generating) {
       generating.value = true
+      startSmoothProgress(progress.value)  // 重启进度条动画，避免卡住
     }
     if (state.sandboxMode === 'simple' || state.sandboxMode === 'advanced') {
       sandboxMode.value = state.sandboxMode
