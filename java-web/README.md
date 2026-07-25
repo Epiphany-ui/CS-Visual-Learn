@@ -7,7 +7,7 @@ CS-Visual-Learn 是一款面向计算机科学与数学领域的交互式知识�
 
 | 层级 | 模块 | 端口 | 技术 |
 |:---|:---|:---:|:---|
-| 前端展示 | Vue 前端 | 8081 | Vue 3 + Axios |
+| 前端展示 | Vue 前端 | 5173 | Vue 3 + Vite + Axios |
 | **业务服务** | **Java 后端（本模块）** | **8080** | **Spring Boot + MyBatis-Plus** |
 | AI 能力 | Python AI 引擎 | 8000 | FastAPI + Manim + Ollama |
 
