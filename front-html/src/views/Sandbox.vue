@@ -771,9 +771,11 @@ onUnmounted(() => {
       <div v-show="sandboxMode === 'advanced'" class="sb-panel panel-code">
         <div class="panel-header">
           <el-icon><Document /></el-icon> Manim 代码
-          <el-button link size="small" :loading="fixing" @click="handleFixCode" style="margin-left:auto">
-            <el-icon><MagicStick /></el-icon> AI 修复
-          </el-button>
+          <el-tooltip :content="requirement.trim() ? 'AI 将参考左侧需求描述修复代码' : '先在左侧输入动画需求，AI 修复效果更好'" placement="bottom" :show-after="300">
+            <el-button link size="small" :loading="fixing" @click="handleFixCode" style="margin-left:auto">
+              <el-icon><MagicStick /></el-icon> AI 修复
+            </el-button>
+          </el-tooltip>
         </div>
         <div class="panel-body code-panel-body" style="position:relative">
           <CodeEditor v-if="!typingActive" v-model="code" :readonly="false" />
