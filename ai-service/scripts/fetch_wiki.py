@@ -218,7 +218,7 @@ def call_llm(messages, max_tokens=2500):
     try:
         r = requests.post(API_URL,
             headers={"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"},
-            json={"model": "deepseek-chat", "messages": messages,
+            json={"model": os.getenv("DEEPSEEK_MODEL_NAME", "deepseek-chat"), "messages": messages,
                   "temperature": 0.3, "max_tokens": max_tokens},
             timeout=90,
         )
