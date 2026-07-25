@@ -12,7 +12,7 @@ import CodeEditor from '@/components/common/CodeEditor.vue'
 import CanvasTypewriter from '@/components/common/CanvasTypewriter.vue'
 import ParamPanel from '@/components/sandbox/ParamPanel.vue'
 import TaskQueue from '@/components/sandbox/TaskQueue.vue'
-import { getKnowledgeNameBySlug, getStudyPathById } from '@/config/studyPaths'
+import { getKnowledgeNameBySlug, getStudyPathById, paths } from '@/config/studyPaths'
 
 const route = useRoute()
 const taskStore = useTaskStore()
@@ -36,6 +36,15 @@ const publishDesc = ref('')
 const publishToGallery = ref(false)
 const studyWikiSlug = ref('')
 const studyPathId = ref('')
+// 发布时用户手动选择的标签
+const publishPathId = ref('')
+const publishKnowledgeSlug = ref('')
+const publishKnowledgeItems = computed(() => {
+  if (!publishPathId.value) return []
+  const path = paths.find(p => p.id === publishPathId.value)
+  if (!path) return []
+  return path.chapters.flatMap(c => c.items)
+})
 const studySourceHint = computed(() => {
   const parts: string[] = []
   if (studyWikiSlug.value) {
@@ -402,6 +411,9 @@ async function handleFixCode() {
 function openPublishDialog() {
   publishDesc.value = requirement.value.slice(0, 200)
   publishToGallery.value = false
+  // 预填：优先用学习路径来源，否则清空让用户自选
+  publishPathId.value = studyPathId.value || ''
+  publishKnowledgeSlug.value = studyWikiSlug.value || ''
   publishDialogVisible.value = true
 }
 
@@ -423,9 +435,11 @@ async function handlePublish() {
       body.append('sourceWorkId', forkSourceId)
       sessionStorage.removeItem('cs:fork-source-id')
     }
-    // 学习路径来源标签
-    if (studyWikiSlug.value) body.append('knowledgeSlug', studyWikiSlug.value)
-    if (studyPathId.value) body.append('pathId', studyPathId.value)
+    // 标签：优先用用户手动选择的，其次用学习路径来源的
+    const finalKnowledgeSlug = publishKnowledgeSlug.value || studyWikiSlug.value
+    const finalPathId = publishPathId.value || studyPathId.value
+    if (finalKnowledgeSlug) body.append('knowledgeSlug', finalKnowledgeSlug)
+    if (finalPathId) body.append('pathId', finalPathId)
     const res = await fetch('/api/v1/work/publish', {
       method: 'POST',
       headers: {
@@ -819,9 +833,26 @@ onUnmounted(() => {
     </div>
 
     <!-- 发布到社区弹窗 -->
-    <el-dialog v-model="publishDialogVisible" title="发布到社区" width="480px">
+    <el-dialog v-model="publishDialogVisible" title="发布到社区" width="500px">
       <div v-if="studySourceHint" class="publish-source-hint">🔗 {{ studySourceHint }}</div>
-      <el-input v-model="publishDesc" type="textarea" :rows="4" placeholder="写一段描述介绍你的作品..." />
+      <el-input v-model="publishDesc" type="textarea" :rows="3" placeholder="写一段描述介绍你的作品..." />
+      <!-- 标签选择 -->
+      <div class="publish-tags">
+        <div class="publish-tags-label">🏷️ 作品标签（选填，帮助更多人发现你的作品）</div>
+        <div class="publish-tags-row">
+          <el-select v-model="publishPathId" placeholder="选择知识合辑" size="small" clearable
+            @change="publishKnowledgeSlug = ''" style="width:100%">
+            <el-option v-for="p in paths" :key="p.id" :label="p.name" :value="p.id" />
+          </el-select>
+        </div>
+        <div class="publish-tags-row">
+          <el-select v-model="publishKnowledgeSlug" placeholder="选择具体知识点（可选）" size="small" clearable
+            :disabled="!publishPathId" style="width:100%">
+            <el-option v-for="item in publishKnowledgeItems" :key="item.wikiSlug"
+              :label="`${item.name} (${item.difficulty})`" :value="item.wikiSlug" />
+          </el-select>
+        </div>
+      </div>
       <el-checkbox v-model="publishToGallery" style="margin-top:12px">同时发布到画廊</el-checkbox>
       <template #footer>
         <el-button @click="publishDialogVisible = false">取消</el-button>
@@ -1035,6 +1066,17 @@ onUnmounted(() => {
   padding: 8px 12px; background: rgba(124,58,237,0.06);
   border-left: 3px solid var(--accent-purple); border-radius: 6px;
 }
+.publish-tags {
+  margin-top: 14px; padding: 12px;
+  background: var(--bg-secondary); border-radius: var(--radius-md);
+}
+.publish-tags-label {
+  font-size: 0.78rem; color: var(--text-tertiary); margin-bottom: 8px;
+}
+.publish-tags-row {
+  margin-bottom: 6px;
+}
+.publish-tags-row:last-child { margin-bottom: 0; }
 
 /* ====== 模式切换 ====== */
 .mode-toggle {
