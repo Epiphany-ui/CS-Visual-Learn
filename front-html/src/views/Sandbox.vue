@@ -625,6 +625,7 @@ onMounted(() => {
   const forkedCode = sessionStorage.getItem('cs:forked-code')
   if (forkedCode && !code.value && !videoUrl.value) {
     code.value = forkedCode
+    sandboxMode.value = 'advanced'  // Fork 后自动切高级模式，方便看代码
     videoUrl.value = ''
     videoPath.value = ''
     currentFilename.value = ''
