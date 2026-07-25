@@ -94,25 +94,49 @@ cs-visual-learn/
 
 ## 快速启动
 
+项目由 **3 个服务** 组成，需要全部启动才能正常使用：
+
+| 服务 | 端口 | 技术栈 | 用途 |
+|------|------|--------|------|
+| 前端 | 5173 | Vue 3 + Vite | 用户界面 |
+| Java 后端 | 8080 | Spring Boot | 业务逻辑、认证、数据库 |
+| Python AI 引擎 | 8000 | FastAPI + Manim | 动画生成、渲染、RAG |
+
+### 一键启动（Windows）
+
 ```bash
 # Windows 一键启动（推荐）
 双击 start.bat
+```
 
-# 或手动启动各服务：
-# 1. Redis
+### 手动启动（跨平台）
+
+```bash
+# 1. Redis（Windows）
 "C:\Program Files\Redis\redis-server.exe"
 
-# 2. API 服务
+#   Redis（macOS / Linux）
+redis-server
+
+# 2. Java 后端 — 用户系统、社区、画廊等业务
+cd java-web
+mvn spring-boot:run  # → http://localhost:8080
+# Swagger 文档：http://localhost:8080/swagger-ui.html
+
+# 3. Python AI 引擎 — 动画生成与渲染
 cd ai-service
 python main.py  # → http://localhost:8000
+# API 文档：http://localhost:8000/docs
 
-# 3. Celery Worker
+# 4. Celery Worker（异步渲染，需 Redis）
 celery -A workers.celery_app worker --loglevel=info -P solo
 
-# 4. 前端
+# 5. 前端
 cd front-html
 npm run dev  # → http://localhost:5173
 ```
+
+> **注意**：如果前端代理报 `ECONNREFUSED` 错误，通常是 Java 后端（8080）或 Python 引擎（8000）未启动。
 
 ## 环境要求
 

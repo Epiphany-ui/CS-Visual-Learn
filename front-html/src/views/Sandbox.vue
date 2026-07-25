@@ -637,14 +637,18 @@ onMounted(() => {
     localStorage.removeItem('cs:active-task')
     // 不自动生成——用户先审查代码再手动渲染
   } else {
-    // 从百科/学习路径跳转过来 → 全新任务，自动开始生成
+    // 从百科/学习路径/首页跳转过来 → 全新任务，无条件覆盖旧状态并自动开始生成
     const prompt = route.query.prompt as string
     if (prompt) {
       requirement.value = prompt
+      disconnect()
+      stopSmoothProgress()
+      generating.value = false
       code.value = ''
       videoUrl.value = ''
       videoPath.value = ''
       currentFilename.value = ''
+      savedToGallery.value = false
       logOutput.value = ''
       typingActive.value = false
       localStorage.removeItem('cs:active-task')

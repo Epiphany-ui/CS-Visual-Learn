@@ -47,8 +47,8 @@ def _init_config():
     EMBEDDING_MODEL_NAME = _cfg.embedding_model_name
 
 DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
-LLM_TEMPERATURE: float = 0.1
-LLM_TOP_P: float = 0.85
+LLM_TEMPERATURE: float = 0.25
+LLM_TOP_P: float = 0.9
 API_REQUEST_TIMEOUT: tuple = (10, 120)
 
 # ===================== 业务常量配置 =====================
@@ -548,7 +548,7 @@ def run_full_pipeline(user_requirement: str, max_retry: int = DEFAULT_RETRY_TIME
             result["try_count"] = current_try
 
             _report("rendering", f"第{current_try}次修复中...", 30 + retry_index * 20)
-            fix_success, fix_result = fix_manim_code(current_code, render_log)
+            fix_success, fix_result = fix_manim_code(current_code, render_log, user_requirement)
             if not fix_success:
                 all_logs.append(f"第{current_try}次修复失败：{fix_result}")
                 break
