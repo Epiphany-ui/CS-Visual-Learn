@@ -6,7 +6,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useCurrentUser } from '@/composables/useCurrentUser'
 import RevealOnScroll from '@/components/common/RevealOnScroll.vue'
 import AvatarIcon from '@/components/common/AvatarIcon.vue'
-import { getKnowledgeNameBySlug, getStudyPathById, getKnowledgeItemBySlug, getPathBySlug } from '@/config/studyPaths'
+import { getKnowledgeNameBySlug, getStudyPathById, getKnowledgeItemBySlug, getPathBySlug, paths } from '@/config/studyPaths'
 
 const PY_BASE = import.meta.env.VITE_PYTHON_BASE ?? ''
 
@@ -98,6 +98,22 @@ async function checkSaved() {
 const publishing = ref(false)
 const publishDialogVisible = ref(false)
 const publishDesc = ref('')
+// 发布标签
+const publishPathId = ref('')
+const publishKnowledgeSlug = ref('')
+const publishKnowledgeItems = computed(() => {
+  if (!publishPathId.value) return []
+  const path = paths.find(p => p.id === publishPathId.value)
+  if (!path) return []
+  return path.chapters.flatMap(c => c.items)
+})
+
+function openPublishDialog() {
+  publishPathId.value = workPathId.value || ''
+  publishKnowledgeSlug.value = workKnowledgeSlug.value || ''
+  publishDesc.value = ''
+  publishDialogVisible.value = true
+}
 
 async function handlePublishToCommunity() {
   if (!token.value) { ElMessage.warning('请先登录再发布'); return }
@@ -109,6 +125,11 @@ async function handlePublishToCommunity() {
     body.append('isPublic', 'true')
     body.append('code', sourceCode.value || '')
     body.append('previewUrl', videoUrl || '')
+    // 标签
+    const finalKnowledgeSlug = publishKnowledgeSlug.value || workKnowledgeSlug.value
+    const finalPathId = publishPathId.value || workPathId.value
+    if (finalKnowledgeSlug) body.append('knowledgeSlug', finalKnowledgeSlug)
+    if (finalPathId) body.append('pathId', finalPathId)
     const res = await fetch('/api/v1/work/publish', {
       method: 'POST',
       headers: {
@@ -345,7 +366,7 @@ onMounted(async () => {
               <el-icon><StarFilled v-if="saved" /><Star v-else /></el-icon>
               {{ saved ? '已收藏' : '收藏' }}
             </el-button>
-            <el-button v-if="isOwner" round type="success" @click="publishDialogVisible = true" v-ripple>
+            <el-button v-if="isOwner" round type="success" @click="openPublishDialog" v-ripple>
               <el-icon><Upload /></el-icon> 发布到社区
             </el-button>
             <el-button round type="primary" @click="handleFork" v-ripple>
@@ -455,8 +476,25 @@ onMounted(async () => {
     </div>
 
     <!-- 发布到社区弹窗 -->
-    <el-dialog v-model="publishDialogVisible" title="发布到社区" width="480px">
-      <el-input v-model="publishDesc" type="textarea" :rows="4" placeholder="写一段描述介绍这个作品..." />
+    <el-dialog v-model="publishDialogVisible" title="发布到社区" width="500px">
+      <el-input v-model="publishDesc" type="textarea" :rows="3" placeholder="写一段描述介绍这个作品..." />
+      <!-- 标签选择 -->
+      <div class="publish-tags">
+        <div class="publish-tags-label">🏷️ 作品标签（选填）</div>
+        <div class="publish-tags-row">
+          <el-select v-model="publishPathId" placeholder="选择知识合辑" size="small" clearable
+            @change="publishKnowledgeSlug = ''" style="width:100%">
+            <el-option v-for="p in paths" :key="p.id" :label="p.name" :value="p.id" />
+          </el-select>
+        </div>
+        <div class="publish-tags-row">
+          <el-select v-model="publishKnowledgeSlug" placeholder="选择具体知识点（可选）" size="small" clearable
+            :disabled="!publishPathId" style="width:100%">
+            <el-option v-for="item in publishKnowledgeItems" :key="item.wikiSlug"
+              :label="`${item.name} (${item.difficulty})`" :value="item.wikiSlug" />
+          </el-select>
+        </div>
+      </div>
       <template #footer>
         <el-button @click="publishDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="publishing" @click="handlePublishToCommunity">发布</el-button>
@@ -637,6 +675,18 @@ onMounted(async () => {
 .knowledge-time {
   font-size: 0.75rem; color: var(--text-tertiary);
 }
+
+.publish-tags {
+  margin-top: 14px; padding: 12px;
+  background: var(--bg-secondary); border-radius: var(--radius-md);
+}
+.publish-tags-label {
+  font-size: 0.78rem; color: var(--text-tertiary); margin-bottom: 8px;
+}
+.publish-tags-row {
+  margin-bottom: 6px;
+}
+.publish-tags-row:last-child { margin-bottom: 0; }
 
 @media (max-width: 900px) {
   .detail-layout { grid-template-columns: 1fr; }
