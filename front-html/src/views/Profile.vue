@@ -17,6 +17,14 @@ const { username, avatar: avatarUrl, displayName, token, userKey, refresh } = us
 
 const myWorksCount = ref(0)
 const myStarsCount = ref(0)
+// 合集贡献：统计学习路径中已完成的知识点数量
+const collectionContribCount = computed(() => {
+  try {
+    const u = username.value || 'anon'
+    const learned = JSON.parse(localStorage.getItem(`cs:learn:${u}`) || '{}')
+    return Object.values(learned).filter(Boolean).length
+  } catch { return 0 }
+})
 
 const editingNickname = ref(false)
 const editingBio = ref(false)
@@ -230,7 +238,8 @@ watch(username, (name) => {
         { icon: 'PictureFilled', color: 'var(--accent-purple)', label: '我的作品', count: javaWorkCount.value || serverWorksCount.value || myWorksCount || 0, click: () => router.push('/gallery?tab=my-works') },
         { icon: 'Star', color: 'var(--accent-orange)', label: '我的收藏', count: myStarsCount, click: () => router.push('/gallery?tab=stars') },
         { icon: 'Collection', color: 'var(--accent-cyan)', label: '词条贡献', count: 0, click: () => router.push('/wiki') },
-        { icon: 'Clock', color: 'var(--accent-green)', label: '模板贡献', count: 0, click: () => router.push('/templates') },
+        { icon: 'Guide', color: 'var(--accent-green)', label: '合集贡献', count: collectionContribCount, click: () => router.push('/study') },
+        { icon: 'Clock', color: 'var(--accent-pink, #ec4899)', label: '模板贡献', count: 0, click: () => router.push('/templates') },
       ]" :key="card.label" :delay="i * 100">
         <div class="pf-card glass-card" v-tilt @click="card.click()">
           <el-icon :size="32" :color="card.color">
@@ -259,7 +268,7 @@ watch(username, (name) => {
 .profile-header { text-align: center; padding: var(--space-2xl); margin-bottom: var(--space-xl); }
 .profile-header h2 { margin: var(--space-md) 0 var(--space-xs); font-size: 1.3rem; font-weight: 700; color: var(--text-primary); }
 .profile-header p { color: var(--text-tertiary); font-size: 0.85rem; margin-bottom: var(--space-lg); }
-.profile-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-md); margin-bottom: var(--space-xl); }
+.profile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: var(--space-md); margin-bottom: var(--space-xl); }
 .pf-card { text-align: center; padding: var(--space-lg); cursor: pointer; }
 .pf-card h4 { font-size: 0.85rem; color: var(--text-secondary); margin: var(--space-sm) 0; }
 .count { font-size: 1.8rem; font-weight: 800; color: var(--text-primary); }
