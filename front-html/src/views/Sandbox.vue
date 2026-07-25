@@ -143,6 +143,7 @@ function saveState() {
       progressMsg: progressMsg.value,
       activeTaskId: _activeTaskId,
       sandboxMode: sandboxMode.value,
+      generating: generating.value,
     }
     localStorage.setItem(STATE_KEY.value, JSON.stringify(state))
   } catch { /* ignore */ }
@@ -163,9 +164,11 @@ function restoreState() {
     _activeTaskId = state.activeTaskId || ''
     progress.value = state.progress || 0
     progressMsg.value = state.progressMsg || ''
-    // 如果上次任务已完成，确保不在生成中状态
+    // 恢复生成状态（进度<100说明任务还在跑，保持generating=true）
     if (progress.value >= 100) {
       generating.value = false
+    } else if ((state as any).generating) {
+      generating.value = true
     }
     if (state.sandboxMode === 'simple' || state.sandboxMode === 'advanced') {
       sandboxMode.value = state.sandboxMode
@@ -719,7 +722,7 @@ function autoSave() {
   if (_autoSaveTimer) clearTimeout(_autoSaveTimer)
   _autoSaveTimer = setTimeout(() => saveState(), 500)
 }
-watch([code, requirement, videoUrl], autoSave)
+watch([code, requirement, videoUrl, generating, progress], autoSave)
 
 onUnmounted(() => {
   disconnect()
