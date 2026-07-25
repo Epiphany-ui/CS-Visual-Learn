@@ -6,6 +6,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useCurrentUser } from '@/composables/useCurrentUser'
 import RevealOnScroll from '@/components/common/RevealOnScroll.vue'
 import AvatarIcon from '@/components/common/AvatarIcon.vue'
+import { getKnowledgeNameBySlug, getStudyPathById, getKnowledgeItemBySlug, getPathBySlug } from '@/config/studyPaths'
 
 const PY_BASE = import.meta.env.VITE_PYTHON_BASE ?? ''
 
@@ -25,6 +26,13 @@ const videoOwner = ref('')
 const isOwner = ref(false)
 const showSource = ref(false)
 const sourceCode = ref('')
+// 作品关联的知识点信息
+const workPathId = ref('')
+const workKnowledgeSlug = ref('')
+const workKnowledgeName = computed(() => getKnowledgeNameBySlug(workKnowledgeSlug.value))
+const workPathName = computed(() => getStudyPathById(workPathId.value)?.name)
+const workKnowledgeItem = computed(() => getKnowledgeItemBySlug(workKnowledgeSlug.value))
+const workKnowledgePath = computed(() => getPathBySlug(workKnowledgeSlug.value))
 
 // 创作者信息（从 Java 画廊接口直接拿，authorId 即 userId）
 const authorInfo = ref<{ userId: string | number; username: string; nickname: string; avatar: string; workId?: number }>({
@@ -204,6 +212,8 @@ async function loadWorkFromGallery() {
       return extractFilename(item.videoPath) === targetFn
     })
     if (currentWork) {
+      workPathId.value = currentWork.pathId || ''
+      workKnowledgeSlug.value = currentWork.knowledgeSlug || ''
       authorInfo.value = {
         userId: currentWork.authorId || '',
         username: currentWork.authorName || '',
@@ -394,6 +404,24 @@ onMounted(async () => {
             <el-button v-if="!isOwner" type="primary" size="small" round full @click="goToUser" v-ripple>
               查看主页
             </el-button>
+          </div>
+        </RevealOnScroll>
+
+        <!-- 相关知识点卡片 -->
+        <RevealOnScroll v-if="workKnowledgeSlug" :delay="130">
+          <div class="knowledge-card glass-card">
+            <h4>📖 相关知识点</h4>
+            <div class="knowledge-info">
+              <div class="knowledge-name" @click="router.push(`/study`)">{{ workKnowledgeName || workKnowledgeSlug }}</div>
+              <div v-if="workPathName" class="knowledge-path">{{ workPathName }}</div>
+              <div v-if="workKnowledgeItem" class="knowledge-meta">
+                <el-tag size="small" effect="plain" type="info">{{ workKnowledgeItem.difficulty }}</el-tag>
+                <span class="knowledge-time">~{{ workKnowledgeItem.estimatedMinutes }} 分钟</span>
+              </div>
+              <el-button size="small" type="primary" round @click="router.push(`/study`)" style="margin-top:8px;width:100%">
+                查看知识合集 →
+              </el-button>
+            </div>
           </div>
         </RevealOnScroll>
 
@@ -588,6 +616,26 @@ onMounted(async () => {
   color: var(--text-tertiary);
   font-size: 0.8rem;
   padding: 16px 0;
+}
+
+/* 知识点卡片 */
+.knowledge-card { padding: var(--space-lg); }
+.knowledge-card h4 {
+  margin: 0 0 var(--space-md); color: var(--text-primary); font-size: 0.95rem;
+}
+.knowledge-name {
+  font-size: 1rem; font-weight: 700; color: var(--accent-purple-light);
+  cursor: pointer; margin-bottom: 4px;
+}
+.knowledge-name:hover { text-decoration: underline; }
+.knowledge-path {
+  font-size: 0.8rem; color: var(--text-tertiary); margin-bottom: 6px;
+}
+.knowledge-meta {
+  display: flex; align-items: center; gap: 8px;
+}
+.knowledge-time {
+  font-size: 0.75rem; color: var(--text-tertiary);
 }
 
 @media (max-width: 900px) {

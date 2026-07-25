@@ -70,28 +70,19 @@ function handleLogout() {
       <!-- Logo -->
       <router-link to="/" class="logo">
         <span class="logo-icon">◆</span>
-        <span class="logo-text">CS Visual Learn</span>
+        <span class="logo-text">Math Visual</span>
       </router-link>
 
       <!-- 导航 -->
       <nav class="nav-links">
-        <router-link to="/wiki" class="nav-link" active-class="nav-active">
-          <el-icon><Collection /></el-icon> 百科
+        <router-link to="/community" class="nav-link" active-class="nav-active">
+          <el-icon><View /></el-icon> 发现
         </router-link>
         <router-link to="/sandbox" class="nav-link" active-class="nav-active">
-          <el-icon><EditPen /></el-icon> 沙箱
-        </router-link>
-        <router-link to="/templates" class="nav-link" active-class="nav-active">
-          <el-icon><Tickets /></el-icon> 模板库
-        </router-link>
-        <router-link to="/gallery" class="nav-link" active-class="nav-active">
-          <el-icon><PictureFilled /></el-icon> 画廊
-        </router-link>
-        <router-link to="/community" class="nav-link" active-class="nav-active">
-          <el-icon><User /></el-icon> 社区
+          <el-icon><EditPen /></el-icon> 创作
         </router-link>
         <router-link to="/study" class="nav-link" active-class="nav-active">
-          <el-icon><Guide /></el-icon> 学习路径
+          <el-icon><Collection /></el-icon> 知识合集
         </router-link>
       </nav>
 
@@ -100,7 +91,7 @@ function handleLogout() {
         <div class="search-box" :class="{ 'search-expanded': searchFocused }">
           <el-input
             v-model="searchKeyword"
-            placeholder="搜索知识点、动画、模板..."
+            placeholder="搜索数学动画、知识点..."
             size="default"
             prefix-icon="Search"
             @keyup.enter="handleSearch"

@@ -1,7 +1,10 @@
 /**
- * 公共学习路径配置
+ * 公共学习路径配置（知识合集）
  * 供 StudyPath、CommunityFeed、Sandbox 等组件共用
+ *
+ * 顺序：数学类合辑在前，计算机类合辑在后
  */
+
 export interface StudyItem {
   name: string
   wikiSlug: string
@@ -19,7 +22,136 @@ export interface StudyPath {
   id: string; name: string; desc: string; color: string; icon: string; chapters: Chapter[]
 }
 
+// ========== 分类常量 ==========
+/** 数学类合辑 ID 列表 */
+export const MATH_PATH_IDS = ['math', 'algebra', 'prob', 'fractal']
+/** 计算机类合辑 ID 列表 */
+export const CS_PATH_IDS = ['ds', 'algo', 'graph', 'dp']
+
+export type WorkCategory = 'math' | 'cs' | 'other'
+
+/** 根据 pathId 判断作品分类 */
+export function getCategoryByPathId(pathId: string | undefined | null): WorkCategory {
+  if (!pathId) return 'other'
+  if (MATH_PATH_IDS.includes(pathId)) return 'math'
+  if (CS_PATH_IDS.includes(pathId)) return 'cs'
+  return 'other'
+}
+
+/** 根据 knowledgeSlug 判断作品分类（遍历所有合辑查找） */
+export function getCategoryBySlug(slug: string | undefined | null): WorkCategory {
+  if (!slug) return 'other'
+  for (const p of paths) {
+    for (const ch of p.chapters) {
+      if (ch.items.some(i => i.wikiSlug === slug)) {
+        return getCategoryByPathId(p.id)
+      }
+    }
+  }
+  return 'other'
+}
+
+/** 综合判断作品分类（优先 pathId，其次 knowledgeSlug） */
+export function getWorkCategory(work: {
+  pathId?: string | null
+  knowledgeSlug?: string | null
+}): WorkCategory {
+  const byPath = getCategoryByPathId(work.pathId)
+  if (byPath !== 'other') return byPath
+  return getCategoryBySlug(work.knowledgeSlug)
+}
+
 export const paths: StudyPath[] = [
+  // ==================== 数学类合辑（优先展示） ====================
+  {
+    id: 'math', name: '高等数学', desc: '用动画理解极限、微积分与级数的几何意义', color: '#3b82f6', icon: 'TrendCharts',
+    chapters: [
+      { id: 'ch1', name: '极限与连续', description: '微积分的基石',
+        items: [
+          { name: '极限 (Limit)', wikiSlug: 'limit', prompt: '函数趋近于某点时极限的可视化动画', difficulty: '中等', estimatedMinutes: 20 },
+          { name: '级数 (Series)', wikiSlug: 'series', prompt: '数列级数收敛发散的动画演示', difficulty: '中等', estimatedMinutes: 25, prerequisites: ['极限 (Limit)'] },
+        ],
+      },
+      { id: 'ch2', name: '微分学', description: '变化率与优化',
+        items: [
+          { name: '导数', wikiSlug: 'derivative', prompt: '导数的切线斜率几何意义动画演示', difficulty: '中等', estimatedMinutes: 25, prerequisites: ['极限 (Limit)'] },
+          { name: '偏导数', wikiSlug: 'partial-derivative', prompt: '多元函数偏导数的几何解释动画', difficulty: '中等', estimatedMinutes: 20, prerequisites: ['导数'] },
+          { name: '泰勒级数', wikiSlug: 'taylor-series', prompt: '泰勒级数多项式逼近函数的动画', difficulty: '中等', estimatedMinutes: 25, prerequisites: ['导数'] },
+          { name: '梯度下降', wikiSlug: 'gradient-descent', prompt: '梯度下降法寻找最小值的迭代过程动画', difficulty: '中等', estimatedMinutes: 25, prerequisites: ['偏导数'] },
+        ],
+      },
+      { id: 'ch3', name: '积分学与进阶', description: '面积、体积与变换',
+        items: [
+          { name: '定积分', wikiSlug: 'integral', prompt: '定积分黎曼和逼近过程动画', difficulty: '中等', estimatedMinutes: 25, prerequisites: ['极限 (Limit)'] },
+          { name: '傅里叶级数', wikiSlug: 'fourier-series', prompt: '傅里叶级数逼近方波的可视化动画', difficulty: '中等', estimatedMinutes: 30, prerequisites: ['泰勒级数'] },
+          { name: '傅里叶级数与变换', wikiSlug: 'fourier-transform', prompt: '傅里叶级数分解与合成的可视化动画，展示方波如何由正弦波叠加而成', difficulty: '中等', estimatedMinutes: 25 },
+          { name: '曼德博集合', wikiSlug: 'mandelbrot-set', prompt: '曼德博集合分形图案放大过程的可视化动画，展示自相似特性', difficulty: '中等', estimatedMinutes: 20 },
+          { name: '欧拉公式', wikiSlug: 'euler-formula', prompt: '欧拉公式e^(iπ)+1=0的几何意义可视化动画，展示复平面上的旋转', difficulty: '中等', estimatedMinutes: 20 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'algebra', name: '线性代数', desc: '矩阵变换、特征值的几何直观理解', color: '#8b5cf6', icon: 'Grid',
+    chapters: [
+      { id: 'ch1', name: '矩阵与变换', description: '线性代数的基本对象',
+        items: [
+          { name: '矩阵运算', wikiSlug: 'matrix', prompt: '矩阵乘法行列对应计算过程动画', difficulty: '入门', estimatedMinutes: 20 },
+          { name: '行列式', wikiSlug: 'determinant', prompt: '行列式的几何意义：面积/体积变换动画', difficulty: '中等', estimatedMinutes: 25, prerequisites: ['矩阵运算'] },
+        ],
+      },
+      { id: 'ch2', name: '线性变换', description: '空间变换的几何直观',
+        items: [
+          { name: '线性变换', wikiSlug: 'linear-transformation', prompt: '线性变换对空间形变影响的可视化动画', difficulty: '中等', estimatedMinutes: 25, prerequisites: ['矩阵运算'] },
+          { name: '向量空间', wikiSlug: 'vector-space', prompt: '向量空间基变换的动画演示', difficulty: '中等', estimatedMinutes: 25 },
+          { name: '正交基', wikiSlug: 'orthogonal-basis', prompt: 'Gram-Schmidt 正交化过程动画', difficulty: '中等', estimatedMinutes: 25, prerequisites: ['向量空间'] },
+        ],
+      },
+      { id: 'ch3', name: '特征分解', description: '矩阵的核心不变量',
+        items: [
+          { name: '特征值与特征向量', wikiSlug: 'eigenvalue', prompt: '特征向量和特征值的几何直观动画', difficulty: '中等', estimatedMinutes: 30, prerequisites: ['线性变换'] },
+          { name: '矩阵对角化', wikiSlug: 'diagonalization', prompt: '矩阵对角化分解过程可视化', difficulty: '困难', estimatedMinutes: 30, prerequisites: ['特征值与特征向量'] },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'prob', name: '概率统计', desc: '从随机变量到统计推断', color: '#ec4899', icon: 'PieChart',
+    chapters: [
+      { id: 'ch1', name: '概率基础', description: '理解随机性',
+        items: [
+          { name: '概率论基础', wikiSlug: 'probability-theory', prompt: '概率基本概念和公理的可视化动画', difficulty: '入门', estimatedMinutes: 20 },
+          { name: '贝叶斯定理', wikiSlug: 'bayes-theorem', prompt: '贝叶斯定理条件概率更新的动画演示', difficulty: '中等', estimatedMinutes: 25, prerequisites: ['概率论基础'] },
+        ],
+      },
+      { id: 'ch2', name: '概率分布', description: '描述随机变量的行为',
+        items: [
+          { name: '正态分布', wikiSlug: 'normal-distribution', prompt: '正态分布的概率密度函数和性质动画', difficulty: '中等', estimatedMinutes: 20, prerequisites: ['概率论基础'] },
+          { name: '中心极限定理', wikiSlug: 'central-limit-theorem', prompt: '中心极限定理的采样分布收敛动画', difficulty: '中等', estimatedMinutes: 25, prerequisites: ['正态分布'] },
+          { name: '大数定律', wikiSlug: 'law-of-large-numbers', prompt: '大数定律样本均值收敛过程动画', difficulty: '中等', estimatedMinutes: 20, prerequisites: ['概率论基础'] },
+        ],
+      },
+      { id: 'ch3', name: '随机过程', description: '随时间演化的随机系统',
+        items: [
+          { name: '马尔可夫链', wikiSlug: 'markov-chain', prompt: '马尔可夫链状态转移的可视化动画', difficulty: '困难', estimatedMinutes: 30, prerequisites: ['概率论基础'] },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'fractal', name: '分形与混沌', desc: '直观感受数学之美', color: '#ec4899', icon: 'Cherry',
+    chapters: [
+      { id: 'ch1', name: '基础分形', description: '经典分形结构',
+        items: [
+          { name: '朱利亚集合', wikiSlug: 'julia-set', prompt: '朱利亚集合分形图案生成动画', difficulty: '中等', estimatedMinutes: 20 },
+          { name: '科赫雪花', wikiSlug: 'koch-snowflake', prompt: '科赫雪花分形生成过程动画，展示周长无限面积有限的特性', difficulty: '入门', estimatedMinutes: 15 },
+          { name: '谢尔宾斯基三角形', wikiSlug: 'sierpinski-triangle', prompt: '谢尔宾斯基三角形分形生成动画', difficulty: '入门', estimatedMinutes: 15 },
+        ],
+      },
+    ],
+  },
+
+  // ==================== 计算机类合辑（内容保持不变） ====================
   {
     id: 'ds', name: '数据结构入门', desc: '从线性表到高级树结构，逐个生成动画直观理解', color: '#7c3aed', icon: 'DataAnalysis',
     chapters: [
@@ -123,78 +255,6 @@ export const paths: StudyPath[] = [
       },
     ],
   },
-  {
-    id: 'math', name: '高等数学', desc: '用动画理解极限、微积分的几何意义', color: '#3b82f6', icon: 'TrendCharts',
-    chapters: [
-      { id: 'ch1', name: '极限与连续', description: '微积分的基石',
-        items: [
-          { name: '极限 (Limit)', wikiSlug: 'limit', prompt: '函数趋近于某点时极限的可视化动画', difficulty: '中等', estimatedMinutes: 20 },
-          { name: '级数 (Series)', wikiSlug: 'series', prompt: '数列级数收敛发散的动画演示', difficulty: '中等', estimatedMinutes: 25, prerequisites: ['极限 (Limit)'] },
-        ],
-      },
-      { id: 'ch2', name: '微分学', description: '变化率与优化',
-        items: [
-          { name: '导数', wikiSlug: 'derivative', prompt: '导数的切线斜率几何意义动画演示', difficulty: '中等', estimatedMinutes: 25, prerequisites: ['极限 (Limit)'] },
-          { name: '偏导数', wikiSlug: 'partial-derivative', prompt: '多元函数偏导数的几何解释动画', difficulty: '中等', estimatedMinutes: 20, prerequisites: ['导数'] },
-          { name: '泰勒级数', wikiSlug: 'taylor-series', prompt: '泰勒级数多项式逼近函数的动画', difficulty: '中等', estimatedMinutes: 25, prerequisites: ['导数'] },
-          { name: '梯度下降', wikiSlug: 'gradient-descent', prompt: '梯度下降法寻找最小值的迭代过程动画', difficulty: '中等', estimatedMinutes: 25, prerequisites: ['偏导数'] },
-        ],
-      },
-      { id: 'ch3', name: '积分学与进阶', description: '面积、体积与变换',
-        items: [
-          { name: '定积分', wikiSlug: 'integral', prompt: '定积分黎曼和逼近过程动画', difficulty: '中等', estimatedMinutes: 25, prerequisites: ['极限 (Limit)'] },
-          { name: '傅里叶级数', wikiSlug: 'fourier-series', prompt: '傅里叶级数逼近方波的可视化动画', difficulty: '中等', estimatedMinutes: 30, prerequisites: ['泰勒级数'] },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'algebra', name: '线性代数', desc: '矩阵变换、特征值的几何直观理解', color: '#8b5cf6', icon: 'Grid',
-    chapters: [
-      { id: 'ch1', name: '矩阵与变换', description: '线性代数的基本对象',
-        items: [
-          { name: '矩阵运算', wikiSlug: 'matrix', prompt: '矩阵乘法行列对应计算过程动画', difficulty: '入门', estimatedMinutes: 20 },
-          { name: '行列式', wikiSlug: 'determinant', prompt: '行列式的几何意义：面积/体积变换动画', difficulty: '中等', estimatedMinutes: 25, prerequisites: ['矩阵运算'] },
-        ],
-      },
-      { id: 'ch2', name: '线性变换', description: '空间变换的几何直观',
-        items: [
-          { name: '线性变换', wikiSlug: 'linear-transformation', prompt: '线性变换对空间形变影响的可视化动画', difficulty: '中等', estimatedMinutes: 25, prerequisites: ['矩阵运算'] },
-          { name: '向量空间', wikiSlug: 'vector-space', prompt: '向量空间基变换的动画演示', difficulty: '中等', estimatedMinutes: 25 },
-          { name: '正交基', wikiSlug: 'orthogonal-basis', prompt: 'Gram-Schmidt 正交化过程动画', difficulty: '中等', estimatedMinutes: 25, prerequisites: ['向量空间'] },
-        ],
-      },
-      { id: 'ch3', name: '特征分解', description: '矩阵的核心不变量',
-        items: [
-          { name: '特征值与特征向量', wikiSlug: 'eigenvalue', prompt: '特征向量和特征值的几何直观动画', difficulty: '中等', estimatedMinutes: 30, prerequisites: ['线性变换'] },
-          { name: '矩阵对角化', wikiSlug: 'diagonalization', prompt: '矩阵对角化分解过程可视化', difficulty: '困难', estimatedMinutes: 30, prerequisites: ['特征值与特征向量'] },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'prob', name: '概率统计', desc: '从随机变量到统计推断', color: '#ec4899', icon: 'PieChart',
-    chapters: [
-      { id: 'ch1', name: '概率基础', description: '理解随机性',
-        items: [
-          { name: '概率论基础', wikiSlug: 'probability-theory', prompt: '概率基本概念和公理的可视化动画', difficulty: '入门', estimatedMinutes: 20 },
-          { name: '贝叶斯定理', wikiSlug: 'bayes-theorem', prompt: '贝叶斯定理条件概率更新的动画演示', difficulty: '中等', estimatedMinutes: 25, prerequisites: ['概率论基础'] },
-        ],
-      },
-      { id: 'ch2', name: '概率分布', description: '描述随机变量的行为',
-        items: [
-          { name: '正态分布', wikiSlug: 'normal-distribution', prompt: '正态分布的概率密度函数和性质动画', difficulty: '中等', estimatedMinutes: 20, prerequisites: ['概率论基础'] },
-          { name: '中心极限定理', wikiSlug: 'central-limit-theorem', prompt: '中心极限定理的采样分布收敛动画', difficulty: '中等', estimatedMinutes: 25, prerequisites: ['正态分布'] },
-          { name: '大数定律', wikiSlug: 'law-of-large-numbers', prompt: '大数定律样本均值收敛过程动画', difficulty: '中等', estimatedMinutes: 20, prerequisites: ['概率论基础'] },
-        ],
-      },
-      { id: 'ch3', name: '随机过程', description: '随时间演化的随机系统',
-        items: [
-          { name: '马尔可夫链', wikiSlug: 'markov-chain', prompt: '马尔可夫链状态转移的可视化动画', difficulty: '困难', estimatedMinutes: 30, prerequisites: ['概率论基础'] },
-        ],
-      },
-    ],
-  },
 ]
 
 /** 根据路径 ID 查找学习路径 */
@@ -208,6 +268,27 @@ export function getKnowledgeNameBySlug(slug: string): string | undefined {
     for (const ch of p.chapters) {
       const item = ch.items.find(i => i.wikiSlug === slug)
       if (item) return item.name
+    }
+  }
+  return undefined
+}
+
+/** 根据知识点 wikiSlug 查找所属路径 */
+export function getPathBySlug(slug: string): StudyPath | undefined {
+  for (const p of paths) {
+    for (const ch of p.chapters) {
+      if (ch.items.some(i => i.wikiSlug === slug)) return p
+    }
+  }
+  return undefined
+}
+
+/** 根据知识点 wikiSlug 查找知识点完整信息 */
+export function getKnowledgeItemBySlug(slug: string): StudyItem | undefined {
+  for (const p of paths) {
+    for (const ch of p.chapters) {
+      const item = ch.items.find(i => i.wikiSlug === slug)
+      if (item) return item
     }
   }
   return undefined
