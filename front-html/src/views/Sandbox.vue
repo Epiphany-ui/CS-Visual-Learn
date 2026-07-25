@@ -160,6 +160,10 @@ function restoreState() {
     _activeTaskId = state.activeTaskId || ''
     progress.value = state.progress || 0
     progressMsg.value = state.progressMsg || ''
+    // 如果上次任务已完成，确保不在生成中状态
+    if (progress.value >= 100) {
+      generating.value = false
+    }
     if (state.sandboxMode === 'simple' || state.sandboxMode === 'advanced') {
       sandboxMode.value = state.sandboxMode
     }
@@ -651,17 +655,21 @@ onMounted(() => {
     // 不自动生成——用户先审查代码再手动渲染
   } else {
     // 从百科/学习路径跳转过来 → 全新任务，自动开始生成
+    // 但如果已恢复出视频/代码（页面刷新场景），跳过，不丢状态
     const prompt = route.query.prompt as string
     if (prompt) {
-      requirement.value = prompt
-      code.value = ''
-      videoUrl.value = ''
-      videoPath.value = ''
-      currentFilename.value = ''
-      logOutput.value = ''
-      typingActive.value = false
-      localStorage.removeItem('cs:active-task')
-      nextTick(() => handleGenerate())
+      const isRefresh = !!videoUrl.value || !!code.value || requirement.value === prompt
+      if (!isRefresh) {
+        requirement.value = prompt
+        code.value = ''
+        videoUrl.value = ''
+        videoPath.value = ''
+        currentFilename.value = ''
+        logOutput.value = ''
+        typingActive.value = false
+        localStorage.removeItem('cs:active-task')
+        nextTick(() => handleGenerate())
+      }
     }
   }
 })
@@ -671,6 +679,8 @@ watch(
   () => route.query.prompt,
   (newPrompt, oldPrompt) => {
     if (newPrompt && newPrompt !== oldPrompt) {
+      // 如果 prompt 和当前 requirement 一致（刷新场景），跳过
+      if (newPrompt === requirement.value) return
       // 从学习路径/百科点击新的动画 → 清空状态并重新生成
       disconnect()
       stopSmoothProgress()
