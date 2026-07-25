@@ -516,31 +516,34 @@ function toggleWorkVideo(work: any) {
 
         <!-- 同学作品（关联到当前知识点的社区公开作品） -->
         <Transition name="wiki-slide">
-          <div v-if="activeWikiKey && activeWikiSlug" class="knowledge-works glass-card">
-            <div class="kw-header">
+          <div v-if="activeWikiKey && activeWikiSlug" class="knowledge-works">
+            <div class="kw-section-header">
               <h4>🎨 同学作品</h4>
               <span v-if="!knowledgeWorksLoading" class="kw-count">{{ knowledgeWorks.length }} 个作品</span>
             </div>
             <div v-loading="knowledgeWorksLoading" style="min-height:120px">
               <div v-if="knowledgeWorks.length > 0" class="kw-grid">
-                <div v-for="work in knowledgeWorks" :key="work.id" class="kw-card">
-                  <div class="kw-cover" @click="toggleWorkVideo(work)">
-                    <img v-if="work.cover" :src="work.cover" class="kw-cover-img" @error="($event.target as HTMLImageElement).style.display='none'" />
-                    <div v-else class="kw-cover-placeholder">
-                      <el-icon :size="28"><VideoPlay /></el-icon>
-                    </div>
-                    <div v-if="work.videoPath" class="kw-play-overlay">
-                      <el-icon :size="20"><VideoPlay /></el-icon>
-                    </div>
-                  </div>
-                  <!-- 视频播放器（点击封面后展开） -->
-                  <div v-if="activeWorkVideo === work.id && work.videoPath" class="kw-video">
+                <div v-for="work in knowledgeWorks" :key="work.id"
+                  class="kw-card glass-card"
+                  :class="{ 'kw-card--active': activeWorkVideo === work.id }">
+                  <!-- 视频播放中：替换缩略图 -->
+                  <div v-if="activeWorkVideo === work.id && work.videoPath" class="kw-video" @click.stop>
                     <video :src="`/videos/${work.videoPath.split('/').pop()}`" controls autoplay class="kw-video-el" />
                   </div>
-                  <div class="kw-body">
-                    <div class="kw-title">{{ work.title }}</div>
-                    <div class="kw-meta">
-                      <AvatarIcon :name="work.authorName" :size="20" :avatar-url="work.authorAvatar || ''" />
+                  <!-- 默认：缩略图 -->
+                  <div v-else class="kw-thumb" @click="toggleWorkVideo(work)">
+                    <img v-if="work.cover" :src="work.cover" class="kw-thumb-img" @error="($event.target as HTMLImageElement).style.display='none'" />
+                    <div v-else class="kw-thumb-placeholder">
+                      <el-icon :size="36"><VideoPlay /></el-icon>
+                    </div>
+                    <div class="kw-play-overlay">
+                      <el-icon :size="32"><VideoPlay /></el-icon>
+                    </div>
+                  </div>
+                  <div class="kw-info">
+                    <h5 class="kw-title">{{ work.title }}</h5>
+                    <div class="kw-meta-row">
+                      <AvatarIcon :name="work.authorName" :size="18" :avatar-url="work.authorAvatar || ''" />
                       <span class="kw-author">{{ work.authorName }}</span>
                       <span class="kw-likes">👍 {{ work._likes }}</span>
                     </div>
@@ -551,6 +554,7 @@ function toggleWorkVideo(work: any) {
                 </div>
               </div>
               <div v-else-if="!knowledgeWorksLoading" class="kw-empty">
+                <el-icon :size="40"><VideoCamera /></el-icon>
                 <p>还没有同学分享这个知识点的动画，快来做第一个吧！</p>
                 <el-button type="primary" round @click="onWikiGenerate('')">🎬 去生成</el-button>
               </div>
@@ -686,47 +690,44 @@ function toggleWorkVideo(work: any) {
 .item-meta { display: flex; align-items: center; gap: 8px; }
 .item-time { font-size: 0.7rem; color: var(--text-tertiary); }
 
-/* 同学作品板块 */
+/* 同学作品板块 — 画廊风格 */
 .knowledge-works {
-  margin-top: var(--space-lg);
-  padding: var(--space-lg);
+  margin-top: var(--space-xl);
 }
-.kw-header {
+.kw-section-header {
   display: flex; align-items: center; gap: 8px;
   font-size: 0.95rem; font-weight: 650; color: var(--text-primary);
   margin-bottom: var(--space-md);
 }
 .kw-count {
   font-size: 0.75rem; color: var(--text-tertiary); font-weight: 400;
-  margin-left: auto;
 }
 .kw-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: var(--space-md);
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-lg);
 }
 .kw-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  transition: all 0.25s ease;
+  overflow: hidden; padding: 0; grid-column: span 1;
 }
-.kw-card:hover {
-  border-color: var(--border-color-light);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+.kw-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
+.kw-card--active {
+  grid-column: span 2;
+  transform: none;
+  border-color: var(--accent-purple);
+  box-shadow: 0 0 0 2px rgba(124,58,237,0.25), var(--shadow-lg);
 }
-.kw-cover {
-  aspect-ratio: 16/9; overflow: hidden; background: var(--bg-secondary);
-  cursor: pointer; position: relative;
+.kw-thumb {
+  position: relative; aspect-ratio: 16/9;
+  background: var(--bg-secondary); overflow: hidden;
+  cursor: pointer;
 }
-.kw-cover-img {
+.kw-thumb-img {
   width: 100%; height: 100%; object-fit: cover;
   transition: transform 0.3s ease;
 }
-.kw-card:hover .kw-cover-img { transform: scale(1.03); }
-.kw-cover-placeholder {
+.kw-card:hover .kw-thumb-img { transform: scale(1.03); }
+.kw-thumb-placeholder {
   width: 100%; height: 100%;
   display: flex; align-items: center; justify-content: center;
   color: var(--text-tertiary);
@@ -736,41 +737,35 @@ function toggleWorkVideo(work: any) {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
   background: rgba(0,0,0,0.35); color: #fff;
-  opacity: 0; transition: opacity 0.25s ease; backdrop-filter: blur(2px);
+  opacity: 0; transition: opacity 0.25s ease;
 }
-.kw-cover:hover .kw-play-overlay { opacity: 1; }
-.kw-video {
-  background: #000;
+.kw-card:hover .kw-play-overlay { opacity: 1; }
+.kw-video { aspect-ratio: 16/9; background: #000; overflow: hidden; }
+.kw-video-el { width: 100%; height: 100%; object-fit: contain; display: block; }
+.kw-info {
+  padding: var(--space-md);
 }
-.kw-video-el {
-  width: 100%; display: block;
+.kw-info h5.kw-title {
+  font-size: 0.88rem; font-weight: 600; color: var(--text-primary);
+  margin: 0 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.kw-body {
-  padding: var(--space-sm) var(--space-md) var(--space-md);
-  display: flex; flex-direction: column; gap: 6px;
-}
-.kw-title {
-  font-size: 0.85rem; font-weight: 600; color: var(--text-primary);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.kw-meta {
+.kw-meta-row {
   display: flex; align-items: center; gap: 6px;
-}
-.kw-author {
-  font-size: 0.75rem; color: var(--text-tertiary); flex: 1;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.kw-likes {
   font-size: 0.75rem; color: var(--text-tertiary);
 }
+.kw-author {
+  flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.kw-likes { flex-shrink: 0; }
 .kw-fork-btn {
-  margin-top: 2px;
+  margin-top: 8px; width: 100%;
 }
 .kw-empty {
-  text-align: center; padding: var(--space-xl);
+  text-align: center; padding: var(--space-2xl);
   color: var(--text-tertiary);
   display: flex; flex-direction: column; align-items: center; gap: var(--space-sm);
 }
+.kw-empty .el-icon { opacity: 0.3; }
 .kw-empty p {
   margin: 0; font-size: 0.88rem;
 }

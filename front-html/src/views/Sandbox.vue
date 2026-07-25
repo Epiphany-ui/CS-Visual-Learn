@@ -546,6 +546,10 @@ onMounted(() => {
   if (forkedCode) {
     code.value = forkedCode
     sessionStorage.removeItem('cs:forked-code')
+    // cs:fork-source-id 留在 sessionStorage，publish 时使用
+  } else {
+    // 非 Fork 场景：清除可能残留的 fork 来源标记，避免污染原创作品
+    sessionStorage.removeItem('cs:fork-source-id')
   }
 
   // 读取学习路径来源标签
@@ -597,6 +601,7 @@ watch(
       typingActive.value = false
       studyWikiSlug.value = (route.query.wikiSlug as string) || ''
       studyPathId.value = (route.query.pathId as string) || ''
+      sessionStorage.removeItem('cs:fork-source-id')
       localStorage.removeItem('cs:active-task')
       nextTick(() => handleGenerate())
     }
