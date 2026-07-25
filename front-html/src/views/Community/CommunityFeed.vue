@@ -7,7 +7,8 @@ import AvatarIcon from '@/components/common/AvatarIcon.vue'
 import { videosApi } from '@/api/videos'
 import { communityApi, type Comment } from '@/api/community'
 import { useCurrentUser } from '@/composables/useCurrentUser'
-import { paths, getStudyPathById, getKnowledgeNameBySlug } from '@/config/studyPaths'
+import { paths, getStudyPathById, getKnowledgeNameBySlug, getWorkCategory } from '@/config/studyPaths'
+import type { WorkCategory } from '@/config/studyPaths'
 
 const router = useRouter()
 const { username: currentUser, userId: currentUserId, displayName: currentDisplayName, avatar: currentAvatar, token, isLoggedIn } = useCurrentUser()
@@ -63,6 +64,7 @@ async function handleDeletePost(post: any) {
 }
 const loading = ref(true)
 const sortBy = ref<'time' | 'likes' | 'views'>('time')
+const categoryFilter = ref<WorkCategory | 'all'>('all')
 const filterPathId = ref('')
 const filterKnowledgeSlug = ref('')
 const filteredKnowledgeItems = computed(() => {
@@ -70,6 +72,13 @@ const filteredKnowledgeItems = computed(() => {
   const path = paths.find(p => p.id === filterPathId.value)
   if (!path) return []
   return path.chapters.flatMap(c => c.items)
+})
+const filteredPosts = computed(() => {
+  let list = posts.value
+  if (categoryFilter.value !== 'all') {
+    list = list.filter(p => p._category === categoryFilter.value)
+  }
+  return list
 })
 const showVideo = ref<number | null>(null)
 const expandedComments = ref<Set<number>>(new Set())
@@ -124,6 +133,7 @@ async function loadPosts() {
       _liked: !!userLiked[w.workId],
       _comments: [] as Comment[],
       _commentTotal: 0,
+      _category: getWorkCategory({ pathId: w.pathId, knowledgeSlug: w.knowledgeSlug }),
     }))
     if (sortBy.value === 'likes') {
       posts.value.sort((a, b) => b._likes - a._likes)
@@ -252,6 +262,17 @@ function clearFilters() {
     refreshFeed()
   }
 
+  function tagFilterByCategory(cat: WorkCategory) {
+    categoryFilter.value = categoryFilter.value === cat ? 'all' : cat
+    refreshFeed()
+  }
+
+  function getCategoryLabel(cat: WorkCategory): string {
+    if (cat === 'math') return '数学'
+    if (cat === 'cs') return '计算机'
+    return ''
+  }
+
   async function refreshFeed() {
   expandedComments.value = new Set()
   await loadPosts()
@@ -273,8 +294,14 @@ onMounted(refreshFeed)
         </el-radio-group>
       </div>
       <div class="toolbar-right">
-        <el-select v-model="filterPathId" placeholder="选择路径" size="small" clearable
-          @change="filterKnowledgeSlug = ''; refreshFeed()" style="width:150px">
+        <el-select v-model="categoryFilter" placeholder="分类" size="small" @change="() => { filterPathId = ''; filterKnowledgeSlug = ''; refreshFeed() }" style="width:120px">
+          <el-option label="📐 数学" value="math" />
+          <el-option label="💻 计算机" value="cs" />
+          <el-option label="📦 其他" value="other" />
+          <el-option label="全部" value="all" />
+        </el-select>
+        <el-select v-model="filterPathId" placeholder="选择合辑" size="small" clearable
+          @change="categoryFilter = 'all';filterKnowledgeSlug = ''; refreshFeed()" style="width:150px">
           <el-option v-for="p in paths" :key="p.id" :label="p.name" :value="p.id" />
         </el-select>
         <el-select v-model="filterKnowledgeSlug" placeholder="选择知识点" size="small" clearable
@@ -289,7 +316,7 @@ onMounted(refreshFeed)
     </div>
 
     <div class="comm-feed" v-loading="loading">
-      <div v-for="post in posts" :key="post.id" class="post-card glass-card">
+      <div v-for="post in filteredPosts" :key="post.id" class="post-card glass-card">
         <!-- 作者信息 -->
         <div class="post-header">
           <div class="post-avatar-clickable" @click="router.push(`/user/${post.authorId}`)">
@@ -307,6 +334,17 @@ onMounted(refreshFeed)
         <!-- 文字内容 -->
         <div class="post-body">
           <h3 class="post-title">{{ post.title }}</h3>
+          <!-- 分类标签 -->
+          <div v-if="post._category !== 'other'" class="post-category-tag">
+            <el-tag size="small"
+              :type="post._category === 'math' ? '' : 'primary'"
+              :color="post._category === 'math' ? '#7c3aed' : undefined"
+              :class="post._category === 'math' ? 'cat-tag-math' : 'cat-tag-cs'"
+              effect="dark"
+              @click.stop="tagFilterByCategory(post._category)">
+              {{ getCategoryLabel(post._category) }}
+            </el-tag>
+          </div>
           <!-- 学习路径/知识点标签 -->
           <div v-if="post.pathId || post.knowledgeSlug" class="post-tags">
             <el-tag v-if="post.pathId" size="small" type="primary" effect="plain"
@@ -391,8 +429,8 @@ onMounted(refreshFeed)
       </div>
     </div>
 
-    <div v-if="!loading && posts.length === 0" class="empty-state">
-      <el-empty description="社区还没有动态，快去沙箱发布作品吧！" />
+    <div v-if="!loading && filteredPosts.length === 0" class="empty-state">
+      <el-empty :description="categoryFilter !== 'all' ? '该分类下还没有作品' : '还没有作品，快去创作第一个数学动画吧！'" />
       <el-button type="primary" round @click="router.push('/sandbox')">去沙箱创作</el-button>
     </div>
   </div>
@@ -556,6 +594,14 @@ onMounted(refreshFeed)
 .post-fork-from { font-size: 0.78rem; color: var(--text-tertiary); margin-top: 2px; }
 .fork-author { color: var(--accent-purple-light); cursor: pointer; font-weight: 500; }
 .fork-author:hover { text-decoration: underline; }
+.post-category-tag {
+  display: flex; gap: 6px; margin: 6px 0; flex-wrap: wrap;
+}
+.post-category-tag .el-tag { cursor: pointer; transition: all 0.2s; font-weight: 500; }
+.post-category-tag .el-tag:hover { transform: translateY(-1px); }
+.cat-tag-math { background: #7c3aed !important; border-color: #7c3aed !important; }
+.cat-tag-cs { background: #3b82f6 !important; border-color: #3b82f6 !important; }
+
 .post-tags {
   display: flex; gap: 6px; margin: 6px 0; flex-wrap: wrap;
 }

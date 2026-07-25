@@ -7,6 +7,10 @@ const router = createRouter({
   routes: [
     {
       path: '/',
+      redirect: '/community',
+    },
+    {
+      path: '/home',
       name: 'home',
       component: () => import('@/views/Home.vue'),
       meta: { title: '首页' },
@@ -63,13 +67,13 @@ const router = createRouter({
       path: '/community',
       name: 'community',
       component: () => import('@/views/Community/CommunityFeed.vue'),
-      meta: { title: '社区' },
+      meta: { title: '发现' },
     },
     {
       path: '/study',
       name: 'study',
       component: () => import('@/views/Study/StudyPath.vue'),
-      meta: { title: '学习路径' },
+      meta: { title: '知识合集' },
     },
     {
       path: '/profile',
@@ -106,7 +110,7 @@ router.beforeEach((to) => {
 
   // 已登录用户访问游客页面（如登录页） → 跳转首页
   if (to.meta.guest && userStore.isLoggedIn) {
-    return { name: 'home' }
+    return { name: 'community' }
   }
 })
 

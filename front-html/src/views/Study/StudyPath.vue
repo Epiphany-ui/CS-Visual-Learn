@@ -305,7 +305,7 @@ function toggleWorkVideo(work: any) {
 
 <template>
   <div class="study-page">
-    <PageHeader title="学习路径" description="按路线逐个学习百科词条，理解后再生成动画巩固" icon="Guide" />
+    <PageHeader title="知识合集" description="按主题浏览可视化动画合集" icon="Collection" />
 
     <!-- 学习统计 + 报告入口 -->
     <RevealOnScroll>
