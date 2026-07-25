@@ -17,7 +17,11 @@ public interface WorkService {
 
     List<Work> listByUser(Integer userId, Integer status, Integer page, Integer size);
 
-    List<Work> listGallery(String rankType, String sort, String category, Integer page, Integer size);
+    List<Work> listGallery(String rankType, String sort, String category, Integer page, Integer size,
+                          String pathId, String knowledgeSlug);
+
+    /** 按知识点 slug 查询关联的公开作品 */
+    List<Work> listByKnowledge(String knowledgeSlug, Integer page, Integer size);
 
     List<Work> listHomeWorks(String type, Integer page, Integer size);
 

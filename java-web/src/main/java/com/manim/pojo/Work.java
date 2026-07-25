@@ -48,6 +48,12 @@ public class Work {
     @Schema(description = "Fork 来源作品 ID（溯源）")
     private Integer sourceWorkId;
 
+    @Schema(description = "关联知识点slug")
+    private String knowledgeSlug;
+
+    @Schema(description = "关联学习路径ID")
+    private String pathId;
+
     @Schema(description = "播放/查看次数")
     private Integer viewCount;
 
@@ -104,6 +110,12 @@ public class Work {
 
     public Integer getSourceWorkId() { return sourceWorkId; }
     public void setSourceWorkId(Integer sourceWorkId) { this.sourceWorkId = sourceWorkId; }
+
+    public String getKnowledgeSlug() { return knowledgeSlug; }
+    public void setKnowledgeSlug(String knowledgeSlug) { this.knowledgeSlug = knowledgeSlug; }
+
+    public String getPathId() { return pathId; }
+    public void setPathId(String pathId) { this.pathId = pathId; }
 
     public Integer getViewCount() { return viewCount; }
     public void setViewCount(Integer viewCount) { this.viewCount = viewCount; }

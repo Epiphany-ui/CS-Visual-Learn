@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import PageHeader from '@/components/common/PageHeader.vue'
@@ -7,6 +7,7 @@ import AvatarIcon from '@/components/common/AvatarIcon.vue'
 import { videosApi } from '@/api/videos'
 import { communityApi, type Comment } from '@/api/community'
 import { useCurrentUser } from '@/composables/useCurrentUser'
+import { paths, getStudyPathById, getKnowledgeNameBySlug } from '@/config/studyPaths'
 
 const router = useRouter()
 const { username: currentUser, userId: currentUserId, displayName: currentDisplayName, avatar: currentAvatar, token, isLoggedIn } = useCurrentUser()
@@ -62,6 +63,14 @@ async function handleDeletePost(post: any) {
 }
 const loading = ref(true)
 const sortBy = ref<'time' | 'likes' | 'views'>('time')
+const filterPathId = ref('')
+const filterKnowledgeSlug = ref('')
+const filteredKnowledgeItems = computed(() => {
+  if (!filterPathId.value) return []
+  const path = paths.find(p => p.id === filterPathId.value)
+  if (!path) return []
+  return path.chapters.flatMap(c => c.items)
+})
 const showVideo = ref<number | null>(null)
 const expandedComments = ref<Set<number>>(new Set())
 const commentInputs = reactive<Record<number, string>>({})
@@ -80,7 +89,12 @@ async function loadPosts() {
   try {
     // 按点赞/浏览时需要取全部数据后在客户端重排
     const size = sortBy.value === 'time' ? 50 : 200
-    const res = await fetch(`/api/v1/gallery/list?sort=${sortBy.value}&size=${size}`)
+    const params = new URLSearchParams()
+    params.set('sort', sortBy.value)
+    params.set('size', String(size))
+    if (filterPathId.value) params.set('pathId', filterPathId.value)
+    if (filterKnowledgeSlug.value) params.set('knowledgeSlug', filterKnowledgeSlug.value)
+    const res = await fetch(`/api/v1/gallery/list?${params.toString()}`)
     const data = await res.json()
     const list: any[] = data.data?.list || []
     const ids = list.map((w: any) => w.workId).filter(Boolean)
@@ -221,7 +235,24 @@ function formatTime(t: string) {
   return d.toLocaleDateString('zh-CN')
 }
 
-async function refreshFeed() {
+function clearFilters() {
+    filterPathId.value = ''
+    filterKnowledgeSlug.value = ''
+    refreshFeed()
+  }
+
+  function tagFilterByPath(pId: string) {
+    filterPathId.value = filterPathId.value === pId ? '' : pId
+    filterKnowledgeSlug.value = ''
+    refreshFeed()
+  }
+
+  function tagFilterBySlug(slug: string) {
+    filterKnowledgeSlug.value = filterKnowledgeSlug.value === slug ? '' : slug
+    refreshFeed()
+  }
+
+  async function refreshFeed() {
   expandedComments.value = new Set()
   await loadPosts()
   preloadTopComments()
@@ -234,11 +265,27 @@ onMounted(refreshFeed)
     <PageHeader title="社区广场" description="分享作品，交流心得，发现灵感" icon="User" />
 
     <div class="comm-toolbar">
-      <el-radio-group v-model="sortBy" size="small" @change="refreshFeed">
-        <el-radio-button value="time">最新</el-radio-button>
-        <el-radio-button value="likes">最多点赞</el-radio-button>
-        <el-radio-button value="views">最多浏览</el-radio-button>
-      </el-radio-group>
+      <div class="toolbar-left">
+        <el-radio-group v-model="sortBy" size="small" @change="refreshFeed">
+          <el-radio-button value="time">最新</el-radio-button>
+          <el-radio-button value="likes">最多点赞</el-radio-button>
+          <el-radio-button value="views">最多浏览</el-radio-button>
+        </el-radio-group>
+      </div>
+      <div class="toolbar-right">
+        <el-select v-model="filterPathId" placeholder="选择路径" size="small" clearable
+          @change="filterKnowledgeSlug = ''; refreshFeed()" style="width:150px">
+          <el-option v-for="p in paths" :key="p.id" :label="p.name" :value="p.id" />
+        </el-select>
+        <el-select v-model="filterKnowledgeSlug" placeholder="选择知识点" size="small" clearable
+          @change="refreshFeed()" style="width:170px" :disabled="!filterPathId">
+          <el-option v-for="item in filteredKnowledgeItems" :key="item.wikiSlug"
+            :label="item.name" :value="item.wikiSlug" />
+        </el-select>
+        <el-button v-if="filterPathId || filterKnowledgeSlug" size="small" round @click="clearFilters">
+          <el-icon><Close /></el-icon> 清除筛选
+        </el-button>
+      </div>
     </div>
 
     <div class="comm-feed" v-loading="loading">
@@ -260,6 +307,17 @@ onMounted(refreshFeed)
         <!-- 文字内容 -->
         <div class="post-body">
           <h3 class="post-title">{{ post.title }}</h3>
+          <!-- 学习路径/知识点标签 -->
+          <div v-if="post.pathId || post.knowledgeSlug" class="post-tags">
+            <el-tag v-if="post.pathId" size="small" type="primary" effect="plain"
+              @click.stop="tagFilterByPath(post.pathId)">
+              📚 {{ getStudyPathById(post.pathId)?.name || post.pathId }}
+            </el-tag>
+            <el-tag v-if="post.knowledgeSlug" size="small" type="success" effect="plain"
+              @click.stop="tagFilterBySlug(post.knowledgeSlug)">
+              📖 {{ getKnowledgeNameBySlug(post.knowledgeSlug) || post.knowledgeSlug }}
+            </el-tag>
+          </div>
           <p v-if="post.sourceAuthorName" class="post-fork-from">Fork 自 <span class="fork-author" @click.stop="router.push(`/user/${post.sourceAuthorId || post.sourceAuthorName}`)">@{{ post.sourceAuthorName }}</span></p>
           <p v-if="post.text" class="post-text">{{ post.text }}</p>
         </div>
@@ -346,7 +404,7 @@ onMounted(refreshFeed)
 /* ---- 排序栏 ---- */
 .comm-toolbar {
   max-width: 680px; margin: 0 auto 28px; padding: 0 var(--space-xl);
-  display: flex; justify-content: center;
+  display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
 }
 .comm-toolbar :deep(.el-radio-button__inner) {
   padding: 8px 20px; font-size: 0.85rem; font-weight: 500;
@@ -498,5 +556,18 @@ onMounted(refreshFeed)
 .post-fork-from { font-size: 0.78rem; color: var(--text-tertiary); margin-top: 2px; }
 .fork-author { color: var(--accent-purple-light); cursor: pointer; font-weight: 500; }
 .fork-author:hover { text-decoration: underline; }
+.post-tags {
+  display: flex; gap: 6px; margin: 6px 0; flex-wrap: wrap;
+}
+.post-tags .el-tag { cursor: pointer; transition: all 0.2s; }
+.post-tags .el-tag:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+
+/* 工具栏增强 */
+.comm-toolbar {
+  flex-wrap: wrap;
+}
+.toolbar-left { display: flex; align-items: center; }
+.toolbar-right { display: flex; align-items: center; gap: 8px; }
+
 .empty-state { text-align: center; padding: 60px 0; }
 </style>
