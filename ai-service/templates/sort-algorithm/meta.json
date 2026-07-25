@@ -69,5 +69,10 @@
       "default": true,
       "description": "是否在柱子上显示具体数值"
     }
-  ]
+  ],
+  "rating": 4.0,
+  "rating_count": 1,
+  "_ratings": {
+    "ASyangyan": 4
+  }
 }

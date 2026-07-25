@@ -12,6 +12,7 @@ import CodeEditor from '@/components/common/CodeEditor.vue'
 import CanvasTypewriter from '@/components/common/CanvasTypewriter.vue'
 import ParamPanel from '@/components/sandbox/ParamPanel.vue'
 import TaskQueue from '@/components/sandbox/TaskQueue.vue'
+import { getKnowledgeNameBySlug, getStudyPathById } from '@/config/studyPaths'
 
 const route = useRoute()
 const taskStore = useTaskStore()
@@ -33,6 +34,20 @@ const currentFilename = ref('')
 const publishDialogVisible = ref(false)
 const publishDesc = ref('')
 const publishToGallery = ref(false)
+const studyWikiSlug = ref('')
+const studyPathId = ref('')
+const studySourceHint = computed(() => {
+  const parts: string[] = []
+  if (studyWikiSlug.value) {
+    const name = getKnowledgeNameBySlug(studyWikiSlug.value) || studyWikiSlug.value
+    parts.push(`${name} 知识点`)
+  }
+  if (studyPathId.value) {
+    const name = getStudyPathById(studyPathId.value)?.name || studyPathId.value
+    parts.push(`${name} 路径`)
+  }
+  return parts.length > 0 ? `将自动关联到【${parts.join(' / ')}】` : ''
+})
 const PY_BASE = import.meta.env.VITE_PYTHON_BASE ?? ''
 const renderQuality = ref(localStorage.getItem('cs:render-quality') || '-qm')
 let _activeTaskId = ''
@@ -352,6 +367,9 @@ async function handlePublish() {
       body.append('sourceWorkId', forkSourceId)
       sessionStorage.removeItem('cs:fork-source-id')
     }
+    // 学习路径来源标签
+    if (studyWikiSlug.value) body.append('knowledgeSlug', studyWikiSlug.value)
+    if (studyPathId.value) body.append('pathId', studyPathId.value)
     const res = await fetch('/api/v1/work/publish', {
       method: 'POST',
       headers: {
@@ -528,7 +546,15 @@ onMounted(() => {
   if (forkedCode) {
     code.value = forkedCode
     sessionStorage.removeItem('cs:forked-code')
+    // cs:fork-source-id 留在 sessionStorage，publish 时使用
+  } else {
+    // 非 Fork 场景：清除可能残留的 fork 来源标记，避免污染原创作品
+    sessionStorage.removeItem('cs:fork-source-id')
   }
+
+  // 读取学习路径来源标签
+  studyWikiSlug.value = (route.query.wikiSlug as string) || ''
+  studyPathId.value = (route.query.pathId as string) || ''
 
   // 从模板库"进阶编辑"跳转 → 已有代码，只需设置标题
   if (route.query.template && forkedCode) {
@@ -573,6 +599,9 @@ watch(
       currentFilename.value = ''
       logOutput.value = ''
       typingActive.value = false
+      studyWikiSlug.value = (route.query.wikiSlug as string) || ''
+      studyPathId.value = (route.query.pathId as string) || ''
+      sessionStorage.removeItem('cs:fork-source-id')
       localStorage.removeItem('cs:active-task')
       nextTick(() => handleGenerate())
     }
@@ -634,7 +663,7 @@ onUnmounted(() => {
             placeholder="描述你想要的动画效果...&#10;&#10;例如：&#10;• 冒泡排序算法可视化&#10;• 傅里叶级数分解方波动画" class="req-input" />
           <div class="quick-prompts">
             <span class="qp-label">快速模板：</span>
-            <el-tag v-for="t in ['快速排序','Dijkstra算法','傅里叶变换','正态分布','二叉树遍历']" :key="t"
+            <el-tag v-for="t in ['快速排序','Dijkstra算法','傅里叶变换','正态分布','二叉树遍历','矩阵旋转','Floyd算法','二分查找','链表','傅里叶级数']" :key="t"
               size="small" class="qp-tag" @click="requirement = t + '动画可视化'">{{ t }}</el-tag>
           </div>
         </div>
@@ -692,6 +721,7 @@ onUnmounted(() => {
 
     <!-- 发布到社区弹窗 -->
     <el-dialog v-model="publishDialogVisible" title="发布到社区" width="480px">
+      <div v-if="studySourceHint" class="publish-source-hint">🔗 {{ studySourceHint }}</div>
       <el-input v-model="publishDesc" type="textarea" :rows="4" placeholder="写一段描述介绍你的作品..." />
       <el-checkbox v-model="publishToGallery" style="margin-top:12px">同时发布到画廊</el-checkbox>
       <template #footer>
@@ -900,6 +930,12 @@ onUnmounted(() => {
 
 @keyframes scale-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+.publish-source-hint {
+  font-size: 0.8rem; color: var(--accent-purple); margin-bottom: 12px;
+  padding: 8px 12px; background: rgba(124,58,237,0.06);
+  border-left: 3px solid var(--accent-purple); border-radius: 6px;
+}
 
 @media (max-width: 1024px) {
   .sb-panels { grid-template-columns: 1fr; height: auto; }
