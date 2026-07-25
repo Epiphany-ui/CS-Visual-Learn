@@ -26,6 +26,14 @@ const collectionContribCount = computed(() => {
   } catch { return 0 }
 })
 
+const statCards = computed(() => [
+  { icon: 'PictureFilled', color: '#7c3aed', label: '我的作品', count: javaWorkCount.value || serverWorksCount.value || myWorksCount.value || 0, click: () => router.push('/gallery?tab=my-works') },
+  { icon: 'Star', color: '#f59e0b', label: '我的收藏', count: myStarsCount.value, click: () => router.push('/gallery?tab=stars') },
+  { icon: 'Collection', color: '#06b6d4', label: '词条贡献', count: 0, click: () => router.push('/wiki') },
+  { icon: 'Guide', color: '#10b981', label: '合集贡献', count: collectionContribCount.value, click: () => router.push('/study') },
+  { icon: 'Clock', color: '#ec4899', label: '模板贡献', count: 0, click: () => router.push('/templates') },
+])
+
 const editingNickname = ref(false)
 const editingBio = ref(false)
 const nickname = ref(displayName.value)
@@ -204,76 +212,199 @@ watch(username, (name) => {
 
 <template>
   <div class="profile-page">
+    <!-- 头部卡片 — 左右布局 -->
     <RevealOnScroll>
-      <div class="profile-header glass-card" style="animation: scale-in 0.6s var(--ease-bounce) both">
-        <div class="avatar-upload-wrap" @click="($refs.avatarInput as any).click()">
-          <AvatarIcon :name="userStore.username" :size="72" :avatar-url="avatarUrl" />
-          <span class="avatar-hint">点击更换头像</span>
+      <div class="pf-banner glass-card">
+        <div class="pf-banner-left">
+          <div class="pf-avatar-ring" @click="($refs.avatarInput as any).click()">
+            <AvatarIcon :name="userStore.username" :size="80" :avatar-url="avatarUrl" />
+            <span class="pf-avatar-badge"><el-icon :size="12"><Camera /></el-icon></span>
+          </div>
+          <input ref="avatarInput" type="file" accept="image/*" style="display:none" @change="handleAvatarUpload" />
         </div>
-        <input ref="avatarInput" type="file" accept="image/*" style="display:none" @change="handleAvatarUpload" />
-        <div v-if="editingNickname" style="display:flex;gap:8px;justify-content:center;align-items:center;margin-top:8px">
-          <el-input v-model="nickname" size="small" style="width:180px" @keyup.enter="saveNickname" />
-          <el-button size="small" type="primary" @click="saveNickname">确认</el-button>
-          <el-button size="small" @click="editingNickname = false; nickname = displayName">取消</el-button>
+
+        <div class="pf-banner-center">
+          <!-- 昵称 -->
+          <div v-if="editingNickname" class="pf-edit-row">
+            <el-input v-model="nickname" size="small" style="width:160px" @keyup.enter="saveNickname" />
+            <el-button size="small" type="primary" @click="saveNickname">确认</el-button>
+            <el-button size="small" @click="editingNickname = false; nickname = displayName">取消</el-button>
+          </div>
+          <div v-else class="pf-nickname" @click="editingNickname = true">
+            {{ nickname }} <el-icon :size="14" class="pf-edit-icon"><EditPen /></el-icon>
+          </div>
+          <!-- ID -->
+          <div class="pf-uid">@{{ userStore.userId }}</div>
+          <!-- 简介 -->
+          <div v-if="editingBio" class="pf-edit-row">
+            <el-input v-model="bio" size="small" style="width:280px" maxlength="200" show-word-limit placeholder="介绍一下自己..." @keyup.enter="saveBio" />
+            <el-button size="small" type="primary" @click="saveBio">确认</el-button>
+            <el-button size="small" @click="editingBio = false">取消</el-button>
+          </div>
+          <div v-else class="pf-bio" @click="editingBio = true">
+            {{ bio || '点击添加个人简介，让大家认识你...' }} <el-icon :size="12" class="pf-edit-icon"><EditPen /></el-icon>
+          </div>
         </div>
-        <h2 v-else style="cursor:pointer" @click="editingNickname = true">
-          {{ nickname }} <el-icon :size="14"><EditPen /></el-icon>
-        </h2>
-        <p>ID: {{ userStore.userId }}</p>
-        <!-- 个人简介 -->
-        <div v-if="editingBio" style="display:flex;gap:8px;justify-content:center;align-items:center;margin-top:8px">
-          <el-input v-model="bio" size="small" style="width:260px" maxlength="200" show-word-limit placeholder="介绍一下自己..." @keyup.enter="saveBio" />
-          <el-button size="small" type="primary" @click="saveBio">确认</el-button>
-          <el-button size="small" @click="editingBio = false">取消</el-button>
+
+        <div class="pf-banner-right">
+          <el-button type="primary" size="large" round @click="router.push('/sandbox')" class="pf-cta-btn">
+            <el-icon><MagicStick /></el-icon> 开始创作
+          </el-button>
         </div>
-        <p v-else style="cursor:pointer;margin-top:4px;color:var(--text-secondary);font-size:0.85rem" @click="editingBio = true">
-          {{ bio || '点击添加个人简介...' }} <el-icon :size="12"><EditPen /></el-icon>
-        </p>
-        <el-button type="primary" round v-ripple @click="router.push('/sandbox')"><el-icon><EditPen /></el-icon> 开始创作</el-button>
       </div>
     </RevealOnScroll>
 
-    <div class="profile-grid">
-      <RevealOnScroll v-for="(card, i) in [
-        { icon: 'PictureFilled', color: 'var(--accent-purple)', label: '我的作品', count: javaWorkCount.value || serverWorksCount.value || myWorksCount || 0, click: () => router.push('/gallery?tab=my-works') },
-        { icon: 'Star', color: 'var(--accent-orange)', label: '我的收藏', count: myStarsCount, click: () => router.push('/gallery?tab=stars') },
-        { icon: 'Collection', color: 'var(--accent-cyan)', label: '词条贡献', count: 0, click: () => router.push('/wiki') },
-        { icon: 'Guide', color: 'var(--accent-green)', label: '合集贡献', count: collectionContribCount, click: () => router.push('/study') },
-        { icon: 'Clock', color: 'var(--accent-pink, #ec4899)', label: '模板贡献', count: 0, click: () => router.push('/templates') },
-      ]" :key="card.label" :delay="i * 100">
-        <div class="pf-card glass-card" v-tilt @click="card.click()">
-          <el-icon :size="32" :color="card.color">
-            <component :is="card.icon" />
-          </el-icon>
-          <h4>{{ card.label }}</h4>
-          <CountNumber class="count" :value="card.count" :duration="1200" />
+    <!-- 统计卡片 — 5列均匀 -->
+    <div class="pf-stats">
+      <RevealOnScroll v-for="(card, i) in statCards" :key="card.label" :delay="i * 80">
+        <div class="pf-stat-card glass-card" @click="card.click()">
+          <div class="pf-stat-icon" :style="{ '--pf-stat-color': card.color }">
+            <el-icon :size="22"><component :is="card.icon" /></el-icon>
+          </div>
+          <div class="pf-stat-num">
+            <CountNumber :value="card.count" :duration="1200" />
+          </div>
+          <div class="pf-stat-label">{{ card.label }}</div>
         </div>
       </RevealOnScroll>
     </div>
 
-    <RevealOnScroll :delay="400">
+    <!-- 账号设置 -->
+    <RevealOnScroll :delay="500">
       <div class="pf-settings glass-card">
-        <h4>账号设置</h4>
-        <el-button type="danger" plain round @click="handleLogout">退出登录</el-button>
+        <div class="pf-settings-row">
+          <div class="pf-settings-info">
+            <h4>账号与安全</h4>
+            <p>管理你的登录状态</p>
+          </div>
+          <el-button type="danger" plain round @click="handleLogout">退出登录</el-button>
+        </div>
       </div>
     </RevealOnScroll>
   </div>
 </template>
 
 <style scoped>
-.profile-page { max-width: 680px; margin: 0 auto; padding: var(--space-xl); }
-.avatar-upload-wrap { cursor: pointer; display: inline-block; position: relative; }
-.avatar-upload-wrap:hover .avatar-hint { opacity: 1; }
-.avatar-hint { position: absolute; bottom: -20px; left: 50%; transform: translateX(-50%); font-size: 0.72rem; color: var(--accent-purple-light); white-space: nowrap; opacity: 0; transition: opacity var(--transition-fast); }
-.profile-header { text-align: center; padding: var(--space-2xl); margin-bottom: var(--space-xl); }
-.profile-header h2 { margin: var(--space-md) 0 var(--space-xs); font-size: 1.3rem; font-weight: 700; color: var(--text-primary); }
-.profile-header p { color: var(--text-tertiary); font-size: 0.85rem; margin-bottom: var(--space-lg); }
-.profile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: var(--space-md); margin-bottom: var(--space-xl); }
-.pf-card { text-align: center; padding: var(--space-lg); cursor: pointer; }
-.pf-card h4 { font-size: 0.85rem; color: var(--text-secondary); margin: var(--space-sm) 0; }
-.count { font-size: 1.8rem; font-weight: 800; color: var(--text-primary); }
-.pf-settings { padding: var(--space-xl); }
-.pf-settings h4 { font-size: 1rem; font-weight: 700; color: var(--text-primary); margin-bottom: var(--space-lg); }
+.profile-page { max-width: 720px; margin: 0 auto; padding: var(--space-xl); display: flex; flex-direction: column; gap: var(--space-lg); }
 
-@media (max-width: 480px) { .profile-grid { grid-template-columns: repeat(2, 1fr); } }
+/* ====== 头部横幅 ====== */
+.pf-banner {
+  display: flex; align-items: center; gap: var(--space-xl);
+  padding: var(--space-2xl); border-radius: var(--radius-xl);
+}
+.pf-banner-left { flex-shrink: 0; }
+.pf-avatar-ring {
+  position: relative; cursor: pointer;
+  width: 88px; height: 88px; border-radius: 50%;
+  padding: 3px;
+  background: var(--gradient-primary);
+  transition: transform var(--transition-fast);
+}
+.pf-avatar-ring:hover { transform: scale(1.05); }
+.pf-avatar-ring :deep(.avatar-icon) {
+  border-radius: 50%; border: 3px solid var(--bg-card);
+}
+.pf-avatar-badge {
+  position: absolute; bottom: 2px; right: 2px;
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--bg-card); border: 2px solid var(--border-color-light);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-secondary); transition: color var(--transition-fast);
+}
+.pf-avatar-ring:hover .pf-avatar-badge { color: var(--accent-purple-light); }
+
+.pf-banner-center { flex: 1; min-width: 0; }
+.pf-nickname {
+  font-size: 1.35rem; font-weight: 750; color: var(--text-primary);
+  cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+  line-height: 1.3;
+}
+.pf-nickname:hover { color: var(--accent-purple-light); }
+.pf-edit-icon { opacity: 0; transition: opacity var(--transition-fast); color: var(--text-tertiary); }
+.pf-nickname:hover .pf-edit-icon,
+.pf-bio:hover .pf-edit-icon { opacity: 1; }
+.pf-uid {
+  font-size: 0.82rem; color: var(--text-tertiary);
+  font-family: var(--font-mono); margin-top: 2px;
+}
+.pf-bio {
+  font-size: 0.88rem; color: var(--text-secondary);
+  cursor: pointer; margin-top: 6px; line-height: 1.5;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.pf-bio:hover { color: var(--text-primary); }
+.pf-edit-row {
+  display: flex; gap: 8px; align-items: center;
+}
+
+.pf-banner-right { flex-shrink: 0; }
+.pf-cta-btn {
+  padding: 14px 28px !important; font-weight: 650 !important;
+  font-size: 0.95rem !important; letter-spacing: 0.02em;
+  background: var(--gradient-primary) !important; border: none !important;
+}
+
+/* ====== 统计卡片行 ====== */
+.pf-stats {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--space-md);
+}
+.pf-stat-card {
+  text-align: center; padding: var(--space-lg) var(--space-sm);
+  cursor: pointer; border-radius: var(--radius-lg);
+  transition: all 0.25s ease;
+}
+.pf-stat-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--accent-purple);
+  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.12);
+}
+.pf-stat-icon {
+  width: 44px; height: 44px; border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--pf-stat-color, #7c3aed) 12%, transparent);
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto var(--space-sm); transition: transform 0.25s ease;
+  color: var(--pf-stat-color, #7c3aed);
+}
+.pf-stat-card:hover .pf-stat-icon { transform: scale(1.1); }
+.pf-stat-num {
+  font-size: 1.6rem; font-weight: 800; color: var(--text-primary);
+  font-variant-numeric: tabular-nums; line-height: 1.2;
+}
+.pf-stat-label {
+  font-size: 0.78rem; color: var(--text-tertiary);
+  margin-top: 2px; font-weight: 500;
+}
+
+/* ====== 设置卡片 ====== */
+.pf-settings {
+  padding: var(--space-xl); border-radius: var(--radius-lg);
+}
+.pf-settings-row {
+  display: flex; justify-content: space-between; align-items: center;
+}
+.pf-settings-info h4 {
+  margin: 0; font-size: 0.95rem; font-weight: 700; color: var(--text-primary);
+}
+.pf-settings-info p {
+  margin: 2px 0 0; font-size: 0.8rem; color: var(--text-tertiary);
+}
+
+/* ====== 响应式 ====== */
+@media (max-width: 768px) {
+  .pf-banner {
+    flex-direction: column; text-align: center;
+    gap: var(--space-md);
+  }
+  .pf-banner-right { width: 100%; }
+  .pf-cta-btn { width: 100%; }
+  .pf-stats { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 480px) {
+  .profile-page { padding: var(--space-md); }
+  .pf-banner { padding: var(--space-lg); }
+  .pf-stats { grid-template-columns: repeat(2, 1fr); }
+  .pf-settings-row { flex-direction: column; gap: var(--space-md); text-align: center; }
+}
 </style>

@@ -156,158 +156,115 @@ function handleLogout() {
 <style scoped>
 .app-header {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 100;
+  top: 0; left: 0; right: 0; z-index: 100;
   height: var(--header-height);
-  background: rgba(10, 10, 15, 0.85);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: rgba(10, 10, 15, 0.82);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
   border-bottom: 1px solid var(--border-color);
-  transition: background var(--transition-base);
 }
-.app-header::after {
-  content: '';
-  position: absolute;
-  bottom: -1px;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--gradient-primary);
-  opacity: 0.5;
-  transform: scaleX(0);
-  transform-origin: center;
-  transition: transform 0.6s var(--ease-out-expo);
-}
-.app-header:hover::after {
-  transform: scaleX(1);
-}
-
 [data-theme="light"] .app-header {
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.82);
 }
 
 .header-inner {
-  max-width: var(--max-content-width);
-  margin: 0 auto;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  gap: var(--space-lg);
-  padding: 0 var(--space-xl);
+  max-width: 1400px; margin: 0 auto; height: 100%;
+  display: flex; align-items: center; gap: var(--space-xl);
+  padding: 0 var(--space-2xl);
 }
 
-/* Logo */
+/* ====== Logo ====== */
 .logo {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  text-decoration: none;
-  flex-shrink: 0;
+  display: flex; align-items: baseline; gap: 6px;
+  text-decoration: none; flex-shrink: 0;
+  transition: transform var(--transition-fast);
 }
+.logo:hover { transform: scale(1.04); }
 .logo-icon {
-  font-size: 1.5rem;
+  font-size: 1.75rem;
   background: var(--gradient-primary);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  filter: drop-shadow(0 0 8px rgba(124, 58, 237, 0.4));
 }
 .logo-text {
-  font-size: 1.05rem;
-  font-weight: 700;
-  background: var(--gradient-primary);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  font-size: 1.25rem; font-weight: 800; letter-spacing: -0.02em;
+  background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-cyan) 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
   white-space: nowrap;
+}
+.logo-text sup {
+  font-size: 0.55em; font-weight: 600;
+  background: none; -webkit-text-fill-color: var(--accent-cyan);
+  margin-left: 1px;
 }
 
-/* 导航 */
+/* ====== 导航 — 胶囊标签 ====== */
 .nav-links {
-  display: flex;
-  gap: var(--space-xs);
-  flex: 1;
-  justify-content: center;
+  display: flex; gap: 2px;
+  flex: 1; justify-content: center;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  padding: 3px;
+  max-width: fit-content;
+  margin: 0 auto;
 }
 .nav-link {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 14px;
-  border-radius: var(--radius-md);
+  display: flex; align-items: center; gap: 5px;
+  padding: 7px 16px;
+  border-radius: var(--radius-full);
   text-decoration: none;
-  color: var(--text-secondary);
-  font-size: 0.9rem;
-  font-weight: 500;
-  transition: all var(--transition-fast);
-  white-space: nowrap;
+  color: var(--text-tertiary);
+  font-size: 0.85rem; font-weight: 550;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap; position: relative;
 }
 .nav-link:hover {
   color: var(--text-primary);
-  background: var(--bg-card-hover);
 }
 .nav-link.nav-active {
-  color: var(--accent-purple-light);
-  background: rgba(124, 58, 237, 0.1);
-  position: relative;
+  color: #fff;
+  background: var(--gradient-primary);
+  box-shadow: 0 2px 12px rgba(124, 58, 237, 0.35), 0 0 0 1px rgba(255,255,255,0.1) inset;
 }
-.nav-link.nav-active::after {
-  content: '';
-  position: absolute;
-  bottom: 2px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 16px;
-  height: 2px;
-  border-radius: 1px;
-  background: var(--accent-purple-light);
-  animation: nav-indicator-in var(--duration-normal) var(--ease-bounce);
+[data-theme="light"] .nav-link.nav-active {
+  color: #fff;
 }
-@keyframes nav-indicator-in {
-  from { width: 0; opacity: 0; }
-  to { width: 16px; opacity: 1; }
+.nav-link.nav-active :deep(.el-icon) {
+  filter: drop-shadow(0 0 4px rgba(255,255,255,0.4));
 }
 
-/* 操作区 */
+/* ====== 操作区 ====== */
 .header-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
+  display: flex; align-items: center; gap: var(--space-md);
   flex-shrink: 0;
 }
 
 .search-box {
-  width: 200px;
-  transition: width var(--transition-base);
+  width: 200px; transition: width var(--transition-base);
 }
-.search-box.search-expanded {
-  width: 260px;
-}
+.search-box.search-expanded { width: 250px; }
 .search-input :deep(.el-input__wrapper) {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-full);
-  box-shadow: none;
+  background: var(--bg-card); border: 1px solid var(--border-color);
+  border-radius: var(--radius-full); box-shadow: none;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  height: 38px;
 }
 .search-input :deep(.el-input__wrapper:hover) {
   border-color: var(--border-color-light);
 }
 .search-input :deep(.el-input__wrapper.is-focus) {
   border-color: var(--accent-purple);
-  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.15);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12);
 }
 
 .theme-btn {
-  background: var(--bg-card) !important;
-  border: 1px solid var(--border-color) !important;
-  color: var(--text-secondary) !important;
-  transition: all var(--transition-base) !important;
+  background: var(--bg-card) !important; border: 1px solid var(--border-color) !important;
+  color: var(--text-secondary) !important; transition: all var(--transition-base) !important;
+  width: 38px; height: 38px;
 }
 .theme-btn:hover {
-  color: var(--text-primary) !important;
-  border-color: var(--accent-purple) !important;
+  color: var(--text-primary) !important; border-color: var(--accent-purple) !important;
 }
 .theme-btn.theme-spin :deep(i) {
   animation: theme-spin 0.6s var(--ease-spring);
@@ -320,17 +277,26 @@ function handleLogout() {
 
 /* 用户 */
 .user-avatar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  cursor: pointer;
-  color: var(--text-secondary);
+  display: flex; align-items: center; gap: var(--space-sm);
+  cursor: pointer; color: var(--text-secondary);
+  padding: 4px 12px 4px 4px; border-radius: var(--radius-full);
+  background: var(--bg-card); border: 1px solid var(--border-color);
+  transition: all var(--transition-fast);
 }
-.user-avatar:hover {
-  color: var(--text-primary);
+.user-avatar:hover { color: var(--text-primary); border-color: var(--border-color-light); }
+.username { font-size: 0.85rem; font-weight: 550; }
+
+@media (max-width: 1100px) {
+  .search-box { display: none; }
+  .nav-links { gap: 0; }
+  .nav-link { padding: 7px 10px; font-size: 0.8rem; }
+  .nav-link .el-icon { font-size: 15px; }
 }
-.username {
-  font-size: 0.9rem;
-  font-weight: 500;
+@media (max-width: 768px) {
+  .header-inner { padding: 0 var(--space-md); gap: var(--space-sm); }
+  .logo-text { font-size: 1.1rem; }
+  .nav-link { padding: 6px 8px; }
+  .nav-link span, .username { display: none; }
+  .nav-link { font-size: 0; }
 }
 </style>
