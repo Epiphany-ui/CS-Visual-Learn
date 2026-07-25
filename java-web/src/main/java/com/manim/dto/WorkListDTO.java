@@ -54,12 +54,19 @@ public class WorkListDTO {
     @Schema(description = "发布时间")
     private String createTime;
 
+    @Schema(description = "关联知识点slug")
+    private String knowledgeSlug;
+
+    @Schema(description = "关联学习路径ID")
+    private String pathId;
+
     public WorkListDTO() {}
 
     public WorkListDTO(Integer workId, Integer authorId, String cover, String title, String description,
                        String authorName, String authorAvatar, Integer likeCount,
                        Integer viewCount, Integer sourceWorkId, String sourceAuthorName,
-                       Integer sourceAuthorId, Integer forkCount, String videoPath, String createTime) {
+                       Integer sourceAuthorId, Integer forkCount, String videoPath, String createTime,
+                       String knowledgeSlug, String pathId) {
         this.workId = workId;
         this.authorId = authorId;
         this.cover = cover;
@@ -75,6 +82,8 @@ public class WorkListDTO {
         this.forkCount = forkCount;
         this.videoPath = videoPath;
         this.createTime = createTime;
+        this.knowledgeSlug = knowledgeSlug;
+        this.pathId = pathId;
     }
 
     public Integer getWorkId() { return workId; }
@@ -121,4 +130,10 @@ public class WorkListDTO {
 
     public String getCreateTime() { return createTime; }
     public void setCreateTime(String createTime) { this.createTime = createTime; }
+
+    public String getKnowledgeSlug() { return knowledgeSlug; }
+    public void setKnowledgeSlug(String knowledgeSlug) { this.knowledgeSlug = knowledgeSlug; }
+
+    public String getPathId() { return pathId; }
+    public void setPathId(String pathId) { this.pathId = pathId; }
 }

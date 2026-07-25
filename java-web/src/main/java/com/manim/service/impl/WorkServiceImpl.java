@@ -57,10 +57,13 @@ public class WorkServiceImpl implements WorkService {
     }
 
     @Override
-    public List<Work> listGallery(String rankType, String sort, String category, Integer page, Integer size) {
+    public List<Work> listGallery(String rankType, String sort, String category, Integer page, Integer size,
+                                  String pathId, String knowledgeSlug) {
         QueryWrapper<Work> qw = new QueryWrapper<>();
         qw.eq("is_public", 1).eq("status", 1);
         if (category != null && !category.isEmpty()) qw.like("tags", category);
+        if (pathId != null && !pathId.isEmpty()) qw.eq("path_id", pathId);
+        if (knowledgeSlug != null && !knowledgeSlug.isEmpty()) qw.eq("knowledge_slug", knowledgeSlug);
         // 优先用 sort 参数（前端直接传），fallback 到 rankType
         if (sort != null && !sort.isEmpty()) {
             switch (sort) {
@@ -133,9 +136,20 @@ public class WorkServiceImpl implements WorkService {
                     null, // sourceAuthorId
                     w.getForkCount(),
                     w.getVideoPath(),
-                    w.getCreateTime() != null ? w.getCreateTime().format(fmt) : null
+                    w.getCreateTime() != null ? w.getCreateTime().format(fmt) : null,
+                    w.getKnowledgeSlug(),
+                    w.getPathId()
             );
         }).collect(java.util.stream.Collectors.toList());
+    }
+
+    @Override
+    public List<Work> listByKnowledge(String knowledgeSlug, Integer page, Integer size) {
+        QueryWrapper<Work> qw = new QueryWrapper<>();
+        qw.eq("is_public", 1).eq("status", 1).eq("knowledge_slug", knowledgeSlug);
+        qw.orderByDesc("like_count").orderByDesc("create_time");
+        qw.last("LIMIT " + ((page - 1) * size) + "," + size);
+        return workMapper.selectList(qw);
     }
 
     @Override

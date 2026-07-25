@@ -12,6 +12,7 @@ import CodeEditor from '@/components/common/CodeEditor.vue'
 import CanvasTypewriter from '@/components/common/CanvasTypewriter.vue'
 import ParamPanel from '@/components/sandbox/ParamPanel.vue'
 import TaskQueue from '@/components/sandbox/TaskQueue.vue'
+import { getKnowledgeNameBySlug, getStudyPathById, paths } from '@/config/studyPaths'
 
 const route = useRoute()
 const taskStore = useTaskStore()
@@ -33,8 +34,71 @@ const currentFilename = ref('')
 const publishDialogVisible = ref(false)
 const publishDesc = ref('')
 const publishToGallery = ref(false)
+const studyWikiSlug = ref('')
+const studyPathId = ref('')
+// 发布时用户手动选择的标签
+const publishPathId = ref('')
+const publishKnowledgeSlug = ref('')
+const publishKnowledgeItems = computed(() => {
+  if (!publishPathId.value) return []
+  const path = paths.find(p => p.id === publishPathId.value)
+  if (!path) return []
+  return path.chapters.flatMap(c => c.items)
+})
+const studySourceHint = computed(() => {
+  const parts: string[] = []
+  if (studyWikiSlug.value) {
+    const name = getKnowledgeNameBySlug(studyWikiSlug.value) || studyWikiSlug.value
+    parts.push(`${name} 知识点`)
+  }
+  if (studyPathId.value) {
+    const name = getStudyPathById(studyPathId.value)?.name || studyPathId.value
+    parts.push(`${name} 路径`)
+  }
+  return parts.length > 0 ? `将自动关联到【${parts.join(' / ')}】` : ''
+})
 const PY_BASE = import.meta.env.VITE_PYTHON_BASE ?? ''
 const renderQuality = ref(localStorage.getItem('cs:render-quality') || '-qm')
+// ========== 简易/高级模式 ==========
+const sandboxMode = ref<'simple' | 'advanced'>((localStorage.getItem('cs:sandbox-mode') as 'simple' | 'advanced') || 'simple')
+const animSpeed = ref<'slow' | 'medium' | 'fast'>('medium')
+const colorTheme = ref<'dark' | 'light' | 'neon'>('dark')
+const showFormulaLabel = ref(true)
+
+function toggleSandboxMode() {
+  sandboxMode.value = sandboxMode.value === 'simple' ? 'advanced' : 'simple'
+  localStorage.setItem('cs:sandbox-mode', sandboxMode.value)
+}
+
+// 简易模式：生成时附带选项参数（纯前端拼字符串，不改后端）
+function buildSimplePrompt(base: string): string {
+  const parts = [base]
+  // 速度
+  if (animSpeed.value === 'slow') parts.push('动画播放速度较慢，细节清晰')
+  else if (animSpeed.value === 'fast') parts.push('动画播放速度较快，流畅展示')
+  // 主题
+  if (colorTheme.value === 'light') parts.push('白色浅色背景')
+  else if (colorTheme.value === 'neon') parts.push('霓虹赛博朋克配色，高对比度')
+  // 公式标注
+  if (showFormulaLabel.value) parts.push('在动画关键位置标注对应的 LaTeX 数学公式')
+  return parts.join('。')
+}
+
+const inputPlaceholder = computed(() => {
+  if (sandboxMode.value === 'simple') {
+    return '你想生成什么数学动画？例如：傅里叶级数逼近方波、y=sin(1/x)函数图像、曼德博集合放大'
+  }
+  return '描述你想要的动画效果...\n\n例如：\n• 冒泡排序算法可视化\n• 傅里叶级数分解方波动画'
+})
+
+const mathQuickPrompts = [
+  { label: '傅里叶变换', prompt: '傅里叶级数分解与合成的可视化动画，展示方波如何由正弦波叠加而成' },
+  { label: '分形图案', prompt: '曼德博集合分形图案放大过程的可视化动画，展示自相似特性' },
+  { label: '函数绘图', prompt: '绘制y=sin(1/x)在x趋近于0时的函数图像动画' },
+  { label: '矩阵变换', prompt: '二维平面上的线性变换可视化动画，展示矩阵对向量的旋转和缩放效果' },
+  { label: '正态分布', prompt: '正态分布概率密度函数的可视化动画，展示不同参数对分布形状的影响' },
+  { label: '级数逼近', prompt: '泰勒级数多项式逼近函数的动画，展示随着阶数增加逼近效果的变化' },
+]
 let _activeTaskId = ''
 let _aiChanging = false   // 标记正在由 AI 修改代码（触发 typewriter）
 let _progressTimer: ReturnType<typeof setInterval> | null = null
@@ -75,6 +139,7 @@ function saveState() {
       progress: progress.value,
       progressMsg: progressMsg.value,
       activeTaskId: _activeTaskId,
+      sandboxMode: sandboxMode.value,
     }
     localStorage.setItem(STATE_KEY.value, JSON.stringify(state))
   } catch { /* ignore */ }
@@ -95,6 +160,9 @@ function restoreState() {
     _activeTaskId = state.activeTaskId || ''
     progress.value = state.progress || 0
     progressMsg.value = state.progressMsg || ''
+    if (state.sandboxMode === 'simple' || state.sandboxMode === 'advanced') {
+      sandboxMode.value = state.sandboxMode
+    }
   } catch { /* ignore */ }
 }
 
@@ -275,8 +343,20 @@ function restoreTaskFromSession() {
 // --- 操作 ---
 function handleGenerate() {
   if (!requirement.value.trim()) return
+  const prompt = sandboxMode.value === 'simple'
+    ? buildSimplePrompt(requirement.value.trim())
+    : requirement.value.trim()
   startAsyncTask(
-    () => generationApi.asyncGenerate(requirement.value.trim(), 3, renderQuality.value, username.value),
+    () => generationApi.asyncGenerate(prompt, 3, renderQuality.value, username.value),
+    { title: requirement.value.slice(0, 30), type: 'generate' }
+  )
+}
+
+function handleRegenerateWithOptions() {
+  if (!requirement.value.trim()) return
+  const prompt = buildSimplePrompt(requirement.value.trim())
+  startAsyncTask(
+    () => generationApi.asyncGenerate(prompt, 3, renderQuality.value, username.value),
     { title: requirement.value.slice(0, 30), type: 'generate' }
   )
 }
@@ -331,6 +411,9 @@ async function handleFixCode() {
 function openPublishDialog() {
   publishDesc.value = requirement.value.slice(0, 200)
   publishToGallery.value = false
+  // 预填：优先用学习路径来源，否则清空让用户自选
+  publishPathId.value = studyPathId.value || ''
+  publishKnowledgeSlug.value = studyWikiSlug.value || ''
   publishDialogVisible.value = true
 }
 
@@ -352,6 +435,11 @@ async function handlePublish() {
       body.append('sourceWorkId', forkSourceId)
       sessionStorage.removeItem('cs:fork-source-id')
     }
+    // 标签：优先用用户手动选择的，其次用学习路径来源的
+    const finalKnowledgeSlug = publishKnowledgeSlug.value || studyWikiSlug.value
+    const finalPathId = publishPathId.value || studyPathId.value
+    if (finalKnowledgeSlug) body.append('knowledgeSlug', finalKnowledgeSlug)
+    if (finalPathId) body.append('pathId', finalPathId)
     const res = await fetch('/api/v1/work/publish', {
       method: 'POST',
       headers: {
@@ -528,7 +616,15 @@ onMounted(() => {
   if (forkedCode) {
     code.value = forkedCode
     sessionStorage.removeItem('cs:forked-code')
+    // cs:fork-source-id 留在 sessionStorage，publish 时使用
+  } else {
+    // 非 Fork 场景：清除可能残留的 fork 来源标记，避免污染原创作品
+    sessionStorage.removeItem('cs:fork-source-id')
   }
+
+  // 读取学习路径来源标签
+  studyWikiSlug.value = (route.query.wikiSlug as string) || ''
+  studyPathId.value = (route.query.pathId as string) || ''
 
   // 从模板库"进阶编辑"跳转 → 已有代码，只需设置标题
   if (route.query.template && forkedCode) {
@@ -573,6 +669,9 @@ watch(
       currentFilename.value = ''
       logOutput.value = ''
       typingActive.value = false
+      studyWikiSlug.value = (route.query.wikiSlug as string) || ''
+      studyPathId.value = (route.query.pathId as string) || ''
+      sessionStorage.removeItem('cs:fork-source-id')
       localStorage.removeItem('cs:active-task')
       nextTick(() => handleGenerate())
     }
@@ -602,9 +701,14 @@ onUnmounted(() => {
 <template>
   <div class="sandbox-page">
     <div class="sb-toolbar">
-      <h1 class="sb-title"><el-icon :size="22"><EditPen /></el-icon> 动画沙箱</h1>
+      <h1 class="sb-title"><el-icon :size="22"><EditPen /></el-icon> AI动画创作台</h1>
       <div class="sb-actions">
-        <el-select v-model="renderQuality" size="small" style="width:110px" @change="(v: string) => localStorage.setItem('cs:render-quality', v)">
+        <div class="mode-toggle">
+          <el-button size="small" :type="sandboxMode === 'simple' ? 'primary' : 'default'" round @click="toggleSandboxMode">
+            {{ sandboxMode === 'simple' ? '🎨 简易模式' : '🔧 高级模式' }}
+          </el-button>
+        </div>
+        <el-select v-show="sandboxMode === 'advanced'" v-model="renderQuality" size="small" style="width:110px" @change="(v: string) => localStorage.setItem('cs:render-quality', v)">
           <el-option label="⚡ 480p" value="-ql" />
           <el-option label="🎯 720p" value="-qm" />
           <el-option label="✨ 1080p" value="-qh" />
@@ -626,21 +730,32 @@ onUnmounted(() => {
       </el-button>
     </div>
 
-    <div class="sb-panels">
+    <div class="sb-panels" :class="{ 'sb-panels-simple': sandboxMode === 'simple' }">
       <div class="sb-panel panel-chat">
-        <div class="panel-header"><el-icon><ChatDotRound /></el-icon> AI 对话助手</div>
+        <div class="panel-header">
+          <el-icon><ChatDotRound /></el-icon>
+          {{ sandboxMode === 'simple' ? '描述你想生成的数学动画' : 'AI 对话助手' }}
+        </div>
         <div class="panel-body">
-          <el-input v-model="requirement" type="textarea" :rows="6"
-            placeholder="描述你想要的动画效果...&#10;&#10;例如：&#10;• 冒泡排序算法可视化&#10;• 傅里叶级数分解方波动画" class="req-input" />
-          <div class="quick-prompts">
+          <el-input v-model="requirement" type="textarea" :rows="sandboxMode === 'simple' ? 5 : 6"
+            :placeholder="inputPlaceholder"
+            class="req-input" />
+          <!-- 简易模式：数学快捷提示 -->
+          <div v-if="sandboxMode === 'simple'" class="quick-prompts">
+            <span class="qp-label">🔥 热门示例：</span>
+            <el-tag v-for="t in mathQuickPrompts" :key="t.label"
+              size="small" class="qp-tag" @click="requirement = t.prompt">{{ t.label }}</el-tag>
+          </div>
+          <!-- 高级模式：原有CS快捷提示 -->
+          <div v-else class="quick-prompts">
             <span class="qp-label">快速模板：</span>
-            <el-tag v-for="t in ['快速排序','Dijkstra算法','傅里叶变换','正态分布','二叉树遍历']" :key="t"
+            <el-tag v-for="t in ['快速排序','Dijkstra算法','傅里叶变换','正态分布','二叉树遍历','矩阵旋转','Floyd算法','二分查找','链表','傅里叶级数']" :key="t"
               size="small" class="qp-tag" @click="requirement = t + '动画可视化'">{{ t }}</el-tag>
           </div>
         </div>
       </div>
 
-      <div class="sb-panel panel-code">
+      <div v-show="sandboxMode === 'advanced'" class="sb-panel panel-code">
         <div class="panel-header">
           <el-icon><Document /></el-icon> Manim 代码
           <el-button link size="small" :loading="fixing" @click="handleFixCode" style="margin-left:auto">
@@ -674,14 +789,41 @@ onUnmounted(() => {
                   <el-icon><Upload /></el-icon> 发布到社区
                 </el-button>
               </div>
+              <!-- 简易模式：零代码调节选项 -->
+              <div v-if="sandboxMode === 'simple'" class="simple-options">
+                <div class="so-title">🎛️ 动画调节</div>
+                <div class="so-row">
+                  <span class="so-label">动画速度：</span>
+                  <el-radio-group v-model="animSpeed" size="small">
+                    <el-radio-button value="slow">慢</el-radio-button>
+                    <el-radio-button value="medium">中</el-radio-button>
+                    <el-radio-button value="fast">快</el-radio-button>
+                  </el-radio-group>
+                </div>
+                <div class="so-row">
+                  <span class="so-label">颜色主题：</span>
+                  <el-radio-group v-model="colorTheme" size="small">
+                    <el-radio-button value="dark">深色</el-radio-button>
+                    <el-radio-button value="light">浅色</el-radio-button>
+                    <el-radio-button value="neon">霓虹</el-radio-button>
+                  </el-radio-group>
+                </div>
+                <div class="so-row">
+                  <span class="so-label">显示公式标注：</span>
+                  <el-switch v-model="showFormulaLabel" size="small" />
+                </div>
+                <el-button type="primary" round size="small" :loading="generating" @click="handleRegenerateWithOptions" class="so-regenerate-btn">
+                  <el-icon><MagicStick /></el-icon> 重新生成
+                </el-button>
+              </div>
             </div>
             <div v-else class="preview-empty">
               <el-icon :size="48"><VideoCamera /></el-icon>
-              <p>生成动画后将在此处预览</p>
+              <p>{{ sandboxMode === 'simple' ? '输入描述后点击生成，AI 将为你创建数学动画' : '生成动画后将在此处预览' }}</p>
             </div>
           </div>
         </div>
-        <ParamPanel :code="code" @update:code="(v: string) => { code = v }" @render="handleRender" />
+        <ParamPanel v-show="sandboxMode === 'advanced'" :code="code" @update:code="(v: string) => { code = v }" @render="handleRender" />
         <TaskQueue @load-task="loadTaskFromQueue" />
         <div v-if="logOutput" class="log-section">
           <div class="panel-header"><el-icon><Document /></el-icon> 渲染日志</div>
@@ -691,8 +833,26 @@ onUnmounted(() => {
     </div>
 
     <!-- 发布到社区弹窗 -->
-    <el-dialog v-model="publishDialogVisible" title="发布到社区" width="480px">
-      <el-input v-model="publishDesc" type="textarea" :rows="4" placeholder="写一段描述介绍你的作品..." />
+    <el-dialog v-model="publishDialogVisible" title="发布到社区" width="500px">
+      <div v-if="studySourceHint" class="publish-source-hint">🔗 {{ studySourceHint }}</div>
+      <el-input v-model="publishDesc" type="textarea" :rows="3" placeholder="写一段描述介绍你的作品..." />
+      <!-- 标签选择 -->
+      <div class="publish-tags">
+        <div class="publish-tags-label">🏷️ 作品标签（选填，帮助更多人发现你的作品）</div>
+        <div class="publish-tags-row">
+          <el-select v-model="publishPathId" placeholder="选择知识合辑" size="small" clearable
+            @change="publishKnowledgeSlug = ''" style="width:100%">
+            <el-option v-for="p in paths" :key="p.id" :label="p.name" :value="p.id" />
+          </el-select>
+        </div>
+        <div class="publish-tags-row">
+          <el-select v-model="publishKnowledgeSlug" placeholder="选择具体知识点（可选）" size="small" clearable
+            :disabled="!publishPathId" style="width:100%">
+            <el-option v-for="item in publishKnowledgeItems" :key="item.wikiSlug"
+              :label="`${item.name} (${item.difficulty})`" :value="item.wikiSlug" />
+          </el-select>
+        </div>
+      </div>
       <el-checkbox v-model="publishToGallery" style="margin-top:12px">同时发布到画廊</el-checkbox>
       <template #footer>
         <el-button @click="publishDialogVisible = false">取消</el-button>
@@ -901,8 +1061,64 @@ onUnmounted(() => {
 @keyframes scale-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 
+.publish-source-hint {
+  font-size: 0.8rem; color: var(--accent-purple); margin-bottom: 12px;
+  padding: 8px 12px; background: rgba(124,58,237,0.06);
+  border-left: 3px solid var(--accent-purple); border-radius: 6px;
+}
+.publish-tags {
+  margin-top: 14px; padding: 12px;
+  background: var(--bg-secondary); border-radius: var(--radius-md);
+}
+.publish-tags-label {
+  font-size: 0.78rem; color: var(--text-tertiary); margin-bottom: 8px;
+}
+.publish-tags-row {
+  margin-bottom: 6px;
+}
+.publish-tags-row:last-child { margin-bottom: 0; }
+
+/* ====== 模式切换 ====== */
+.mode-toggle {
+  display: flex; align-items: center;
+}
+.mode-toggle .el-button {
+  font-weight: 600; padding: 6px 18px;
+}
+
+/* 简易模式：两栏布局 */
+.sb-panels-simple {
+  grid-template-columns: 1fr 1fr !important;
+}
+.sb-panels-simple .panel-chat { grid-column: span 1; }
+
+/* ====== 简易模式：零代码调节选项 ====== */
+.simple-options {
+  margin-top: 12px; padding: 14px 16px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+}
+[data-theme="light"] .simple-options {
+  background: rgba(0,0,0,0.02);
+}
+.so-title {
+  font-size: 0.82rem; font-weight: 650; color: var(--text-primary); margin-bottom: 10px;
+}
+.so-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin-bottom: 8px;
+}
+.so-label {
+  font-size: 0.78rem; color: var(--text-secondary); white-space: nowrap;
+}
+.so-regenerate-btn {
+  margin-top: 8px; width: 100%;
+}
+
 @media (max-width: 1024px) {
   .sb-panels { grid-template-columns: 1fr; height: auto; }
+  .sb-panels-simple { grid-template-columns: 1fr !important; }
   .sb-panel { min-height: 320px; }
 }
 </style>

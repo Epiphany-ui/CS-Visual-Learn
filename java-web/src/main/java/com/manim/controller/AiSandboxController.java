@@ -144,7 +144,9 @@ public class AiSandboxController {
             @RequestParam("isPublic") Boolean isPublic,
             @RequestParam("code") String code,
             @RequestParam(value = "previewUrl", required = false) String previewUrl,
-            @RequestParam(value = "sourceWorkId", required = false) Integer sourceWorkId) {
+            @RequestParam(value = "sourceWorkId", required = false) Integer sourceWorkId,
+            @RequestParam(value = "knowledgeSlug", required = false) String knowledgeSlug,
+            @RequestParam(value = "pathId", required = false) String pathId) {
 
         if (workTitle == null || workTitle.trim().isEmpty())
             throw new BusinessException("workTitle 不能为空");
@@ -164,6 +166,12 @@ public class AiSandboxController {
         work.setStatus(1);
         if (sourceWorkId != null) {
             work.setSourceWorkId(sourceWorkId);
+        }
+        if (knowledgeSlug != null && !knowledgeSlug.trim().isEmpty()) {
+            work.setKnowledgeSlug(knowledgeSlug.trim());
+        }
+        if (pathId != null && !pathId.trim().isEmpty()) {
+            work.setPathId(pathId.trim());
         }
         Integer workId = workService.saveWork(work);
 

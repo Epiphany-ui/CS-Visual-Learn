@@ -22,6 +22,8 @@ const emit = defineEmits<{
 
 const detail = ref<WikiDetail | null>(null)
 const loading = ref(false)
+const wikiError = ref(false)
+const wikiEmpty = ref(false)
 const contentHtml = ref('')
 const startTime = ref(0)
 
@@ -54,10 +56,12 @@ function fixLinks(html: string): string {
 async function loadContent() {
   if (!props.wikiSlug) return
   loading.value = true
+  wikiError.value = false
+  wikiEmpty.value = false
   startTime.value = Date.now()
   try {
     const res = await wikiApi.getDetail(props.wikiSlug)
-    if (res.data.data) {
+    if (res.data.data && res.data.data.content) {
       detail.value = res.data.data
       let html = res.data.data.content
       html = renderMath(html)
@@ -65,10 +69,17 @@ async function loadContent() {
       html = fixLinks(html)
       contentHtml.value = html
       await nextTick()
+    } else {
+      // 接口返回成功但无内容
+      wikiEmpty.value = true
+      detail.value = null
+      contentHtml.value = ''
     }
   } catch {
+    // 接口报错
+    wikiError.value = true
     detail.value = null
-    contentHtml.value = '<p class="wiki-error">百科内容加载失败</p>'
+    contentHtml.value = ''
   } finally {
     loading.value = false
   }
@@ -107,6 +118,8 @@ watch([() => props.visible, () => props.wikiSlug], ([v, slug]) => {
   if (v && slug) {
     detail.value = null
     contentHtml.value = ''
+    wikiError.value = false
+    wikiEmpty.value = false
     loadContent()
   }
 }, { immediate: true })
@@ -135,16 +148,28 @@ function getDifficultyClass(d: string): string {
         </el-button>
       </div>
 
-      <div class="wiki-preview-body" v-loading="loading">
-        <div v-if="contentHtml" class="wiki-content prose" v-html="contentHtml" />
-        <div v-else-if="!loading" class="wiki-empty">
-          <el-icon :size="32"><Document /></el-icon>
-          <p>暂无百科内容</p>
+      <div class="wiki-preview-body">
+        <!-- 加载中 -->
+        <div v-if="loading" class="wiki-loading">
+          <el-icon :size="28" class="loading-icon"><Loading /></el-icon>
+          <p>🤖 正在生成知识点解释...</p>
+        </div>
+        <!-- 加载成功，显示百科内容 -->
+        <div v-else-if="contentHtml" class="wiki-content prose" v-html="contentHtml" />
+        <!-- 加载失败或接口无内容，兜底状态 -->
+        <div v-else class="wiki-fallback">
+          <el-icon :size="36"><Notebook /></el-icon>
+          <p class="wiki-fallback-title">📝 知识点百科正在完善中</p>
+          <p class="wiki-fallback-desc">{{ wikiError ? '百科服务暂时不可用，但不影响动画生成' : '该知识点的详细解释还在路上' }}</p>
+          <p class="wiki-fallback-hint">直接生成动画直观理解数学原理吧 ✨</p>
+          <el-button type="primary" size="default" round @click="handleGenerate" class="wiki-fallback-btn">
+            <el-icon><MagicStick /></el-icon> 生成对应动画
+          </el-button>
         </div>
       </div>
 
-      <div v-if="detail && !loading" class="wiki-preview-actions">
-        <el-button size="default" @click="handleMarkLearned">
+      <div v-if="!loading" class="wiki-preview-actions">
+        <el-button v-if="detail" size="default" @click="handleMarkLearned">
           <el-icon><CircleCheck /></el-icon>
           标记已学
         </el-button>
@@ -211,6 +236,26 @@ function getDifficultyClass(d: string): string {
 .wiki-content :deep(td) { padding: 6px 12px; border-bottom: 1px solid var(--border-color); }
 .wiki-content :deep(a) { color: var(--accent-purple); text-decoration: none; }
 .wiki-content :deep(a:hover) { text-decoration: underline; }
+
+/* 加载中 */
+.wiki-loading {
+  text-align: center; padding: var(--space-2xl);
+  color: var(--text-secondary);
+}
+.wiki-loading p { margin: var(--space-md) 0 0; font-size: 0.9rem; }
+.loading-icon { animation: spin 1.2s linear infinite; color: var(--accent-purple); }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 兜底状态 */
+.wiki-fallback {
+  text-align: center; padding: var(--space-2xl);
+  display: flex; flex-direction: column; align-items: center; gap: var(--space-sm);
+}
+.wiki-fallback .el-icon { color: var(--text-tertiary); opacity: 0.5; }
+.wiki-fallback-title { font-size: 0.95rem; font-weight: 600; color: var(--text-primary); margin: 0; }
+.wiki-fallback-desc { font-size: 0.82rem; color: var(--text-tertiary); margin: 0; }
+.wiki-fallback-hint { font-size: 0.85rem; color: var(--text-secondary); margin: var(--space-md) 0 0; }
+.wiki-fallback-btn { margin-top: var(--space-sm); }
 
 .wiki-empty {
   text-align: center;

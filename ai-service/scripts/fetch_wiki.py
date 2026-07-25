@@ -58,7 +58,7 @@ CAT_MAP = {
     "大数":"probability","中心极限":"probability","假设检验":"probability",
     "似然":"probability","马尔可夫":"probability","泊松":"probability",
     "随机过程":"probability","协方差":"probability","蒙特卡洛":"probability",
-    "分布":"probability",
+    "分布":"probability","曼德博":"math","朱利亚":"math","科赫":"math","谢尔宾斯基":"math","欧拉":"math","分形":"math","雪花":"math",
 }
 
 DIFF_MAP = {
@@ -92,7 +92,7 @@ DIFF_MAP = {
     "网络流":"困难","二分图匹配":"困难","强连通分量":"困难",
     "马尔可夫链":"困难","随机过程":"困难",
     "A星搜索算法":"困难","模拟退火算法":"困难","遗传算法":"困难",
-    "梯度下降":"困难","牛顿法":"中等",
+    "梯度下降":"困难","牛顿法":"中等","曼德博集合":"中等","朱利亚集合":"中等","科赫雪花":"入门","谢尔宾斯基三角形":"入门","欧拉公式":"中等",
 }
 
 # 基于拼音/中文字符的 slug 自动生成，映射表仅维护常见词条
@@ -143,7 +143,7 @@ SLUG_MAP = {
     "假设检验":"hypothesis-testing","最大似然估计":"mle",
     "马尔可夫链":"markov-chain","泊松分布":"poisson-distribution",
     "随机过程":"stochastic-process","协方差":"covariance",
-    "蒙特卡洛方法":"monte-carlo",
+    "蒙特卡洛方法":"monte-carlo","曼德博集合":"mandelbrot-set","朱利亚集合":"julia-set","科赫雪花":"koch-snowflake","谢尔宾斯基三角形":"sierpinski-triangle","欧拉公式":"euler-formula",
 }
 
 
@@ -177,6 +177,8 @@ def fetch_wiki(title, lang="zh"):
                 headers=headers,
                 proxies=PROXIES, timeout=30,
             )
+        if not r.ok:
+            print(f"  API错误 {r.status_code}: {r.text[:300]}")
         r.raise_for_status()
         data = r.json()
         for pid, page in data["query"]["pages"].items():
@@ -216,10 +218,12 @@ def call_llm(messages, max_tokens=2500):
     try:
         r = requests.post(API_URL,
             headers={"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"},
-            json={"model": "deepseek-chat", "messages": messages,
+            json={"model": os.getenv("DEEPSEEK_MODEL_NAME", "deepseek-chat"), "messages": messages,
                   "temperature": 0.3, "max_tokens": max_tokens},
             timeout=90,
         )
+        if not r.ok:
+            print(f"  API错误 {r.status_code}: {r.text[:300]}")
         r.raise_for_status()
         return r.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:

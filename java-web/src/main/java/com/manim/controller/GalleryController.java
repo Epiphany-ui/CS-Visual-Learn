@@ -1,6 +1,8 @@
 package com.manim.controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.manim.dto.WorkListDTO;
+import com.manim.mapper.WorkMapper;
 import com.manim.pojo.Result;
 import com.manim.pojo.User;
 import com.manim.pojo.Work;
@@ -27,6 +29,9 @@ public class GalleryController {
     @Autowired
     private UserService userService;
 
+    @Autowired
+    private WorkMapper workMapper;
+
     @Operation(summary = "获取画廊作品列表/排行榜")
     @GetMapping("/list")
     public Result<Map<String, Object>> getGalleryList(
@@ -34,9 +39,11 @@ public class GalleryController {
             @RequestParam(value = "sort", required = false) String sort,
             @RequestParam(value = "category", required = false) String category,
             @RequestParam(value = "page", defaultValue = "1") Integer page,
-            @RequestParam(value = "size", defaultValue = "10") Integer size) {
+            @RequestParam(value = "size", defaultValue = "10") Integer size,
+            @RequestParam(value = "pathId", required = false) String pathId,
+            @RequestParam(value = "knowledgeSlug", required = false) String knowledgeSlug) {
 
-        List<Work> works = workService.listGallery(rankType, sort, category, page, size);
+        List<Work> works = workService.listGallery(rankType, sort, category, page, size, pathId, knowledgeSlug);
         List<WorkListDTO> list = works.stream().map(w -> {
             User author = userService.getById(w.getUserId());
             String authorName = author != null ?
@@ -61,7 +68,37 @@ public class GalleryController {
                     w.getDescription(), authorName, authorAvatar,
                     w.getLikeCount(), w.getViewCount(),
                     w.getSourceWorkId(), sourceAuthorName, sourceAuthorId,
-                    w.getForkCount(), w.getVideoPath(), createTime);
+                    w.getForkCount(), w.getVideoPath(), createTime,
+                    w.getKnowledgeSlug(), w.getPathId());
+        }).collect(Collectors.toList());
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("list", list);
+        data.put("total", list.size());
+        return Result.success(data);
+    }
+
+    @Operation(summary = "按知识点查询关联的公开作品")
+    @GetMapping("/by-knowledge")
+    public Result<Map<String, Object>> getByKnowledge(
+            @RequestParam("slug") String slug,
+            @RequestParam(value = "page", defaultValue = "1") Integer page,
+            @RequestParam(value = "size", defaultValue = "50") Integer size) {
+
+        List<Work> works = workService.listByKnowledge(slug, page, size);
+        List<WorkListDTO> list = works.stream().map(w -> {
+            User author = userService.getById(w.getUserId());
+            String authorName = author != null ?
+                (author.getNickname() != null ? author.getNickname() : author.getUsername()) :
+                "匿名用户";
+            String authorAvatar = author != null ? author.getAvatar() : null;
+            String createTime = w.getCreateTime() != null ? w.getCreateTime().toString() : null;
+            return new WorkListDTO(w.getId(), w.getUserId(), w.getCover(), w.getTitle(),
+                    w.getDescription(), authorName, authorAvatar,
+                    w.getLikeCount(), w.getViewCount(),
+                    w.getSourceWorkId(), null, null,
+                    w.getForkCount(), w.getVideoPath(), createTime,
+                    w.getKnowledgeSlug(), w.getPathId());
         }).collect(Collectors.toList());
 
         Map<String, Object> data = new HashMap<>();

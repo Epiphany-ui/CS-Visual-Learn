@@ -63,13 +63,13 @@ const router = createRouter({
       path: '/community',
       name: 'community',
       component: () => import('@/views/Community/CommunityFeed.vue'),
-      meta: { title: '社区' },
+      meta: { title: '发现' },
     },
     {
       path: '/study',
       name: 'study',
       component: () => import('@/views/Study/StudyPath.vue'),
-      meta: { title: '学习路径' },
+      meta: { title: '知识合集' },
     },
     {
       path: '/profile',
@@ -113,7 +113,7 @@ router.beforeEach((to) => {
 // 路由后置守卫：统一设置页面标题
 router.afterEach((to) => {
   const title = to.meta.title as string
-  document.title = title ? `${title} - CS Visual Learn` : 'CS Visual Learn'
+  document.title = title ? `${title} - 动数派` : '动数派'
 })
 
 export default router

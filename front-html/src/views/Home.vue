@@ -95,9 +95,19 @@ function scrollToExplore() {
 
         <!-- 副标题：从下方飞入 -->
         <p class="hero-subtitle">
-          <span class="sub-line sub-line-1">基于 AI 的可视化学习平台</span>
+          <span class="sub-line sub-line-1">让数学动起来，让灵感看得见</span>
           <span class="sub-line sub-line-2">输入知识点，即刻生成交互式数学动画</span>
         </p>
+
+        <!-- CTA 按钮 -->
+        <div class="hero-cta">
+          <el-button type="primary" size="large" round @click="router.push('/community')" class="hero-cta-btn" v-ripple>
+            <el-icon><View /></el-icon> 发现有趣动画
+          </el-button>
+          <el-button size="large" round @click="router.push('/sandbox')" class="hero-cta-outline" v-ripple>
+            <el-icon><EditPen /></el-icon> 开始创作动画
+          </el-button>
+        </div>
 
         <!-- 搜索框：缩放入 -->
         <div class="hero-input">
@@ -298,6 +308,27 @@ function scrollToExplore() {
   0% { opacity: 0; transform: translateY(40px); filter: blur(4px); }
   100% { opacity: 1; transform: translateY(0); filter: blur(0); }
 }
+
+/* CTA 按钮 — 弹入 */
+.hero-cta {
+  margin-top: var(--space-xl); display: flex; gap: var(--space-md);
+  justify-content: center; flex-wrap: wrap;
+  opacity: 0; animation: input-pop 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) 1.05s forwards;
+}
+.hero-cta-btn {
+  padding: 14px 32px !important; font-weight: 650 !important;
+  font-size: 0.95rem !important; letter-spacing: 0.02em;
+  background: var(--gradient-primary) !important; border: none !important;
+  box-shadow: 0 4px 20px rgba(124, 58, 237, 0.35);
+}
+.hero-cta-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(124, 58, 237, 0.45); }
+.hero-cta-outline {
+  padding: 14px 32px !important; font-weight: 650 !important;
+  font-size: 0.95rem !important; letter-spacing: 0.02em;
+  background: transparent !important; color: var(--text-primary) !important;
+  border: 1.5px solid var(--border-color-light) !important;
+}
+.hero-cta-outline:hover { border-color: var(--accent-purple) !important; color: var(--accent-purple-light) !important; transform: translateY(-2px); }
 
 /* 搜索框 — 弹入 */
 .hero-input { margin-top: var(--space-2xl); max-width: 620px; margin-inline: auto; opacity: 0; animation: input-pop 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) 1.2s forwards; }
