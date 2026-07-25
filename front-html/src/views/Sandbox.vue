@@ -107,6 +107,9 @@ let _taskCompleted = false // 防止 onerror 覆盖已完成的结果
 let _recoveryAttempts = 0  // 防止无限重连循环
 let _nextTaskTimer: ReturnType<typeof setTimeout> | null = null // 自动启动下一个任务的定时器
 
+// ========== 状态恢复标记（防止刷新丢失） ==========
+const _isStateRestored = ref(false)
+
 // ========== Canvas Typewriter 画笔写入效果 ==========
 function onCanvasDone() {
   typingActive.value = false
@@ -608,18 +611,20 @@ function loadTaskFromQueue(taskId: string) {
 }
 
 onMounted(() => {
-  // 恢复任务队列
+  // 1. 先恢复任务队列
   taskStore.restore()
-
-  // 先恢复上一次的沙箱状态
+  // 2. 恢复本地存储的沙箱状态（代码、视频、设置、进度）
   restoreState()
+  // 3. 恢复正在进行的任务（重连SSE）
   restoreTaskFromSession()
+  // 4. 标记状态恢复完成！！！核心：没等恢复完就被后面的逻辑清了
+  _isStateRestored.value = true
 
-  // Fork 过来的代码 → 覆盖 code，同时清空旧状态
+  // ========== 下面处理跳转参数，必须等状态恢复完再处理 ==========
+  // 处理Fork参数：只有真的是新的Fork（session里有forkedCode，且当前没有恢复出代码/视频）才清空覆盖
   const forkedCode = sessionStorage.getItem('cs:forked-code')
-  if (forkedCode) {
+  if (forkedCode && !code.value && !videoUrl.value) {
     code.value = forkedCode
-    // 清空旧视频/日志，让用户看到的是干净的 Fork 环境
     videoUrl.value = ''
     videoPath.value = ''
     currentFilename.value = ''
@@ -630,21 +635,19 @@ onMounted(() => {
     savedToGallery.value = false
     generating.value = false
     localStorage.removeItem('cs:active-task')
-    // Fork 时清空旧 prompt，让用户基于代码重新创作
     requirement.value = ''
     sessionStorage.removeItem('cs:forked-code')
-    // cs:fork-source-id 留在 sessionStorage，publish 时使用
   } else {
-    // 非 Fork 场景：清除可能残留的 fork 来源标记，避免污染原创作品
     sessionStorage.removeItem('cs:fork-source-id')
+    sessionStorage.removeItem('cs:forked-code')
   }
 
-  // 读取学习路径来源标签
+  // 读取来源标签
   studyWikiSlug.value = (route.query.wikiSlug as string) || ''
   studyPathId.value = (route.query.pathId as string) || ''
 
-  // 从模板库"进阶编辑"跳转 → 已有代码，只需设置标题
-  if (route.query.template && forkedCode) {
+  // 处理模板跳转参数，有恢复内容就不覆盖
+  if (route.query.template && forkedCode && !code.value && !videoUrl.value) {
     requirement.value = `模板创作: ${route.query.template}`
     videoUrl.value = ''
     videoPath.value = ''
@@ -652,25 +655,26 @@ onMounted(() => {
     logOutput.value = ''
     typingActive.value = false
     localStorage.removeItem('cs:active-task')
-    // 不自动生成——用户先审查代码再手动渲染
-  } else {
-    // 从百科/学习路径跳转过来 → 全新任务，自动开始生成
-    // 但如果已恢复出视频/代码（页面刷新场景），跳过，不丢状态
-    const prompt = route.query.prompt as string
-    if (prompt) {
-      const isRefresh = !!videoUrl.value || !!code.value || requirement.value === prompt
-      if (!isRefresh) {
-        requirement.value = prompt
-        code.value = ''
-        videoUrl.value = ''
-        videoPath.value = ''
-        currentFilename.value = ''
-        logOutput.value = ''
-        typingActive.value = false
-        localStorage.removeItem('cs:active-task')
-        nextTick(() => handleGenerate())
-      }
-    }
+  }
+
+  // 处理路由带的prompt：只有满足以下条件才触发新生成：
+  // 条件1：状态已经恢复完成
+  // 条件2：url里的prompt和当前恢复出来的requirement不一样（真的是新跳转，不是刷新）
+  // 条件3：当前没有正在生成的任务，也没有已经生成好的视频
+  const prompt = route.query.prompt as string
+  if (prompt && _isStateRestored.value && prompt !== requirement.value && !generating.value && !videoUrl.value) {
+    disconnect()
+    stopSmoothProgress()
+    requirement.value = prompt
+    code.value = ''
+    videoUrl.value = ''
+    videoPath.value = ''
+    currentFilename.value = ''
+    logOutput.value = ''
+    typingActive.value = false
+    sessionStorage.removeItem('cs:fork-source-id')
+    localStorage.removeItem('cs:active-task')
+    nextTick(() => handleGenerate())
   }
 })
 
@@ -678,10 +682,8 @@ onMounted(() => {
 watch(
   () => route.query.prompt,
   (newPrompt, oldPrompt) => {
-    if (newPrompt && newPrompt !== oldPrompt) {
-      // 如果 prompt 和当前 requirement 一致（刷新场景），跳过
-      if (newPrompt === requirement.value) return
-      // 从学习路径/百科点击新的动画 → 清空状态并重新生成
+    // 只有状态恢复完、新prompt和当前内容不一样、没有正在生成/已生成的视频，才触发新生成
+    if (_isStateRestored.value && newPrompt && newPrompt !== oldPrompt && newPrompt !== requirement.value && !generating.value && !videoUrl.value) {
       disconnect()
       stopSmoothProgress()
       generating.value = false
