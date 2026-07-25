@@ -602,7 +602,7 @@ onUnmounted(() => {
 <template>
   <div class="sandbox-page">
     <div class="sb-toolbar">
-      <h1 class="sb-title"><el-icon :size="22"><EditPen /></el-icon> 动画沙箱</h1>
+      <h1 class="sb-title"><el-icon :size="22"><EditPen /></el-icon> AI动画创作台</h1>
       <div class="sb-actions">
         <el-select v-model="renderQuality" size="small" style="width:110px" @change="(v: string) => localStorage.setItem('cs:render-quality', v)">
           <el-option label="⚡ 480p" value="-ql" />

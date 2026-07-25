@@ -6,8 +6,8 @@
   <footer class="app-footer">
     <div class="footer-inner">
       <div class="footer-brand">
-        <span class="footer-logo">◆ CS Visual Learn</span>
-        <p class="footer-tagline">让每一个抽象概念都有对应的直观动画，让知识看得见。</p>
+        <span class="footer-logo">◆ 动数派</span>
+        <p class="footer-tagline">让数学动起来，让灵感看得见</p>
       </div>
       <div class="footer-links">
         <div class="link-group">
@@ -31,7 +31,7 @@
       </div>
     </div>
     <div class="footer-bottom">
-      <span>&copy; 2026 CS Visual Learn. Powered by Manim + DeepSeek.</span>
+      <span>&copy; 2026 动数派. Powered by Manim + DeepSeek.</span>
     </div>
   </footer>
 </template>

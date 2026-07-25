@@ -231,7 +231,7 @@ onMounted(refreshFeed)
 
 <template>
   <div class="community-page">
-    <PageHeader title="社区广场" description="分享作品，交流心得，发现灵感" icon="User" />
+    <PageHeader title="发现有趣的数学动画" description="让数学动起来，让灵感看得见" icon="User" />
 
     <div class="comm-toolbar">
       <el-radio-group v-model="sortBy" size="small" @change="refreshFeed">

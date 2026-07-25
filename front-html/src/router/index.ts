@@ -113,7 +113,7 @@ router.beforeEach((to) => {
 // 路由后置守卫：统一设置页面标题
 router.afterEach((to) => {
   const title = to.meta.title as string
-  document.title = title ? `${title} - CS Visual Learn` : 'CS Visual Learn'
+  document.title = title ? `${title} - 动数派` : '动数派'
 })
 
 export default router
