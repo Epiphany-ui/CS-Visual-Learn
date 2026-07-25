@@ -548,7 +548,7 @@ def run_full_pipeline(user_requirement: str, max_retry: int = DEFAULT_RETRY_TIME
             result["try_count"] = current_try
 
             _report("rendering", f"第{current_try}次修复中...", 30 + retry_index * 20)
-            fix_success, fix_result = fix_manim_code(current_code, render_log)
+            fix_success, fix_result = fix_manim_code(current_code, render_log, user_requirement)
             if not fix_success:
                 all_logs.append(f"第{current_try}次修复失败：{fix_result}")
                 break
