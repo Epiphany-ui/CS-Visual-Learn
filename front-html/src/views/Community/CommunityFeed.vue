@@ -283,7 +283,7 @@ onMounted(refreshFeed)
 
 <template>
   <div class="community-page">
-    <PageHeader title="发现有趣的数学动画" description="用AI零门槛生成数学可视化动画，分享你的灵感" icon="View" />
+    <PageHeader title="发现有趣的数学动画" description="让数学动起来，让灵感看得见" icon="User" />
 
     <div class="comm-toolbar">
       <div class="toolbar-left">

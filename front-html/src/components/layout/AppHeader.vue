@@ -70,7 +70,7 @@ function handleLogout() {
       <!-- Logo -->
       <router-link to="/" class="logo">
         <span class="logo-icon">◆</span>
-        <span class="logo-text">Math Visual</span>
+        <span class="logo-text">动数派<sup>π</sup></span>
       </router-link>
 
       <!-- 导航 -->

@@ -684,7 +684,7 @@ onUnmounted(() => {
 <template>
   <div class="sandbox-page">
     <div class="sb-toolbar">
-      <h1 class="sb-title"><el-icon :size="22"><EditPen /></el-icon> 动画沙箱</h1>
+      <h1 class="sb-title"><el-icon :size="22"><EditPen /></el-icon> AI动画创作台</h1>
       <div class="sb-actions">
         <div class="mode-toggle">
           <el-button size="small" :type="sandboxMode === 'simple' ? 'primary' : 'default'" round @click="toggleSandboxMode">
