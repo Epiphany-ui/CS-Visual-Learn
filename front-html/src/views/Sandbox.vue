@@ -107,9 +107,6 @@ let _taskCompleted = false // 防止 onerror 覆盖已完成的结果
 let _recoveryAttempts = 0  // 防止无限重连循环
 let _nextTaskTimer: ReturnType<typeof setTimeout> | null = null // 自动启动下一个任务的定时器
 
-// ========== 状态恢复标记（防止刷新丢失） ==========
-const _isStateRestored = ref(false)
-
 // ========== Canvas Typewriter 画笔写入效果 ==========
 function onCanvasDone() {
   typingActive.value = false
@@ -143,7 +140,6 @@ function saveState() {
       progressMsg: progressMsg.value,
       activeTaskId: _activeTaskId,
       sandboxMode: sandboxMode.value,
-      generating: generating.value,
     }
     localStorage.setItem(STATE_KEY.value, JSON.stringify(state))
   } catch { /* ignore */ }
@@ -164,12 +160,6 @@ function restoreState() {
     _activeTaskId = state.activeTaskId || ''
     progress.value = state.progress || 0
     progressMsg.value = state.progressMsg || ''
-    // 恢复生成状态（进度<100说明任务还在跑，保持generating=true）
-    if (progress.value >= 100) {
-      generating.value = false
-    } else if ((state as any).generating) {
-      generating.value = true
-    }
     if (state.sandboxMode === 'simple' || state.sandboxMode === 'advanced') {
       sandboxMode.value = state.sandboxMode
     }
@@ -614,53 +604,30 @@ function loadTaskFromQueue(taskId: string) {
 }
 
 onMounted(() => {
-  // 1. 先恢复任务队列
+  // 恢复任务队列
   taskStore.restore()
-  // 2. 恢复本地存储的沙箱状态（代码、视频、设置、进度）
-  restoreState()
-  // 3. 恢复正在进行的任务（重连SSE）
-  restoreTaskFromSession()
-  // 4. 标记状态恢复完成！！！核心：没等恢复完就被后面的逻辑清了
-  _isStateRestored.value = true
 
-  // ========== 下面处理跳转参数，必须等状态恢复完再处理 ==========
-  // 处理Fork参数：Fork优先级最高，只要session里有forkedCode就无条件覆盖
+  // 先恢复上一次的沙箱状态
+  restoreState()
+  restoreTaskFromSession()
+
+  // Fork 过来的代码 → 覆盖 code
   const forkedCode = sessionStorage.getItem('cs:forked-code')
   if (forkedCode) {
-    // 停止当前所有生成任务
-    disconnect()
-    stopSmoothProgress()
-    generating.value = false
-    // 清空旧状态
-    videoUrl.value = ''
-    videoPath.value = ''
-    currentFilename.value = ''
-    logOutput.value = ''
-    typingActive.value = false
-    progress.value = 0
-    progressMsg.value = ''
-    savedToGallery.value = false
-    localStorage.removeItem('cs:active-task')
-    // Fork 代码覆盖
     code.value = forkedCode
-    sandboxMode.value = 'advanced'
-    // 清空旧需求描述和来源标签
-    requirement.value = ''
-    studyWikiSlug.value = ''
-    studyPathId.value = ''
-    // 删掉 forkedCode 避免刷新重复覆盖，保留 cs:fork-source-id 给发布用
     sessionStorage.removeItem('cs:forked-code')
+    // cs:fork-source-id 留在 sessionStorage，publish 时使用
   } else {
+    // 非 Fork 场景：清除可能残留的 fork 来源标记，避免污染原创作品
     sessionStorage.removeItem('cs:fork-source-id')
-    sessionStorage.removeItem('cs:forked-code')
   }
 
-  // 读取来源标签
+  // 读取学习路径来源标签
   studyWikiSlug.value = (route.query.wikiSlug as string) || ''
   studyPathId.value = (route.query.pathId as string) || ''
 
-  // 处理模板跳转参数，有恢复内容就不覆盖
-  if (route.query.template && forkedCode && !code.value && !videoUrl.value) {
+  // 从模板库"进阶编辑"跳转 → 已有代码，只需设置标题
+  if (route.query.template && forkedCode) {
     requirement.value = `模板创作: ${route.query.template}`
     videoUrl.value = ''
     videoPath.value = ''
@@ -668,26 +635,25 @@ onMounted(() => {
     logOutput.value = ''
     typingActive.value = false
     localStorage.removeItem('cs:active-task')
-  }
-
-  // 处理路由带的prompt：只有满足以下条件才触发新生成：
-  // 条件1：状态已经恢复完成
-  // 条件2：url里的prompt和当前恢复出来的requirement不一样（真的是新跳转，不是刷新）
-  // 条件3：当前没有正在生成的任务，也没有已经生成好的视频
-  const prompt = route.query.prompt as string
-  if (prompt && _isStateRestored.value && prompt !== requirement.value && !generating.value && !videoUrl.value) {
-    disconnect()
-    stopSmoothProgress()
-    requirement.value = prompt
-    code.value = ''
-    videoUrl.value = ''
-    videoPath.value = ''
-    currentFilename.value = ''
-    logOutput.value = ''
-    typingActive.value = false
-    sessionStorage.removeItem('cs:fork-source-id')
-    localStorage.removeItem('cs:active-task')
-    nextTick(() => handleGenerate())
+    // 不自动生成——用户先审查代码再手动渲染
+  } else {
+    // 从百科/学习路径/首页跳转过来 → 全新任务，无条件覆盖旧状态并自动开始生成
+    const prompt = route.query.prompt as string
+    if (prompt) {
+      requirement.value = prompt
+      disconnect()
+      stopSmoothProgress()
+      generating.value = false
+      code.value = ''
+      videoUrl.value = ''
+      videoPath.value = ''
+      currentFilename.value = ''
+      savedToGallery.value = false
+      logOutput.value = ''
+      typingActive.value = false
+      localStorage.removeItem('cs:active-task')
+      nextTick(() => handleGenerate())
+    }
   }
 })
 
@@ -695,8 +661,8 @@ onMounted(() => {
 watch(
   () => route.query.prompt,
   (newPrompt, oldPrompt) => {
-    // 只有状态恢复完、新prompt和当前内容不一样、没有正在生成/已生成的视频，才触发新生成
-    if (_isStateRestored.value && newPrompt && newPrompt !== oldPrompt && newPrompt !== requirement.value && !generating.value && !videoUrl.value) {
+    if (newPrompt && newPrompt !== oldPrompt) {
+      // 从学习路径/百科点击新的动画 → 清空状态并重新生成
       disconnect()
       stopSmoothProgress()
       generating.value = false
@@ -722,7 +688,7 @@ function autoSave() {
   if (_autoSaveTimer) clearTimeout(_autoSaveTimer)
   _autoSaveTimer = setTimeout(() => saveState(), 500)
 }
-watch([code, requirement, videoUrl, generating, progress], autoSave)
+watch([code, requirement, videoUrl], autoSave)
 
 onUnmounted(() => {
   disconnect()
@@ -796,11 +762,9 @@ onUnmounted(() => {
       <div v-show="sandboxMode === 'advanced'" class="sb-panel panel-code">
         <div class="panel-header">
           <el-icon><Document /></el-icon> Manim 代码
-          <el-tooltip :content="requirement.trim() ? 'AI 将参考左侧需求描述修复代码' : '先在左侧输入动画需求，AI 修复效果更好'" placement="bottom" :show-after="300">
-            <el-button link size="small" :loading="fixing" @click="handleFixCode" style="margin-left:auto">
-              <el-icon><MagicStick /></el-icon> AI 修复
-            </el-button>
-          </el-tooltip>
+          <el-button link size="small" :loading="fixing" @click="handleFixCode" style="margin-left:auto">
+            <el-icon><MagicStick /></el-icon> AI 修复
+          </el-button>
         </div>
         <div class="panel-body code-panel-body" style="position:relative">
           <CodeEditor v-if="!typingActive" v-model="code" :readonly="false" />
